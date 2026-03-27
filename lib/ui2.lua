@@ -398,7 +398,7 @@ end
 local function Root_mainloop(self)
 	Root_show(self)
 	while true do
-		local evt = {os.pullEventRaw()}
+		local evt = {coroutine.yield()}
 		if evt[1] == "terminate" then
 			break
 		end
