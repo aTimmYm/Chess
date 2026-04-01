@@ -195,7 +195,7 @@ end
 
 ---@param args Widget
 ---@return object
-local function Widget(args)
+function UI.Widget(args)
 	return {
 		x = args.x, y = args.y,
 		w = args.w, h = args.h,
@@ -329,7 +329,7 @@ end
 ---@param args Container Initialization table with fields above
 ---@return table object container
 function UI.Container(args)
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.children = {}
 	instance.custom_handlers = {}
@@ -400,6 +400,10 @@ local function Root_mainloop(self)
 	while true do
 		local evt = {coroutine.yield()}
 		if evt[1] == "terminate" then
+			term.setBackgroundColor(colors.black)
+			term.setTextColor(colors.white)
+			term.setCursorPos(1,1)
+			term.clear()
 			break
 		end
 		self:onEvent(evt)
@@ -606,7 +610,7 @@ end
 ---@return table object tumbler (switcher)
 function UI.Tumbler(args)
 	args.w = 2; args.h = 1
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.on = args.on or false
 	instance.bc = args.bc or colors.gray
@@ -685,7 +689,7 @@ end
 ---@return table object radioButton_horizontal
 function UI.RadioButton_horizontal(args)
 	args.w = 1; args.h = 1;
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.count = (args.count and args.count >= 1) and args.count or 1
 	instance.w = instance.count
@@ -718,7 +722,7 @@ local function RadioButton_onMouseUp(self, btn, x, y)
 	if self:check(x, y) then
 		self.item = y - self.y + 1
 		self.dirty = true
-		self:pressed()
+		self:pressed(self.text[self.item])
 	end
 	return true
 end
@@ -975,7 +979,7 @@ end
 ---@param args Label Initialization table with fields above
 ---@return table object label
 function UI.Label(args)
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.text = args.text or ""
 	instance.align = args.align or "center"
@@ -1050,7 +1054,7 @@ end
 ---@param args Button
 ---@return object
 function UI.Button(args)
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.text = args.text or ""
 	instance.held = false
@@ -1470,7 +1474,7 @@ end
 function UI.Scrollbar(obj)
 	expect(1, obj, "table")
 
-	local instance = Widget({
+	local instance = UI.Widget({
 		x = obj.x + obj.w, y = obj.y,
 		w = 1, h = obj.h,
 		bc = obj.bc,
@@ -1666,7 +1670,7 @@ end
 ---@param obj table Target object which the horizontal scrollbar will be attached to
 ---@return table return scrollbar_horizontal
 function UI.Scrollbar_Horizontal(obj)
-	local instance = Widget({
+	local instance = UI.Widget({
 		x = obj.x, y = obj.y + obj.h,
 		w = obj.w, h = 1,
 		bc = obj.bc,
@@ -1802,7 +1806,7 @@ end
 ---@param args List Initialization table with fields above
 ---@return table object list
 function UI.List(args)
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	add_mixin(instance, ScrollableMixin)
 	instance:initScroll(3, 3)
@@ -2005,7 +2009,7 @@ local function Textfield_onKeyDown(self, key, held)
 		end
 	elseif key == keys.enter then
 		self.selected.status = false
-		self:pressed()
+		self:pressed(self.text)
 	elseif key == keys.leftShift and not held then
 		if not self.selected.status then
 			local cx = self.cursor_x
@@ -2043,7 +2047,7 @@ end
 ---@return table object Textfield
 function UI.Textfield(args)
 	args.h = 1
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.offset = 0
 	instance.hint = args.hint or "Type here"
@@ -2432,7 +2436,7 @@ end
 ---@return table object TextBox
 
 function UI.TextBox(args)
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	add_mixin(instance, ScrollableMixin)
 	instance:initScroll(3, 3)
@@ -2508,7 +2512,7 @@ end
 ---@return table object checkbox
 function UI.Checkbox(args)
 	args.w = 1; args.h = 1
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.on = args.on or false
 
@@ -2586,7 +2590,7 @@ end
 ---@param args Clock Initialization table with fields above
 ---@return table object clock
 function UI.Clock(args)
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.show_seconds = args.show_seconds or false
 	instance.is_24h = args.is_24h or true
@@ -2608,6 +2612,69 @@ function UI.Clock(args)
 	instance.updateTime = Clock_updateTime
 	instance.setFormat = Clock_setFormat
 	instance.onEvent = Clock_onEvent
+
+	return instance
+end
+
+local function Timer_updateTime(self)
+	-- local now = os.epoch("utc") / 1000
+
+	-- local frac = now - _floor(now)
+	-- local delay = 1 - frac
+
+	local delay = 1
+
+	self.timer = os.startTimer(delay)
+	self.time = self.time - 1
+	if self.time <=0 then log("Timer end") self:pause() end
+	self.dirty = true
+end
+
+local function Timer_pause(self)
+	os.cancelTimer(self.timer)
+	self.timer = nil
+	return true
+end
+
+local function Timer_unpause(self)
+	return self:updateTime()
+end
+
+local function Timer_setTime(self, sec)
+	if type(sec) == 'number' then
+		self.time = sec
+		self:updateTime()
+		return true
+	end
+	return false
+end
+
+local function Timer_addTime(self, sec)
+	return Timer_setTime(self, self.time + sec)
+end
+
+local function Timer_draw(self)
+	term.setBackgroundColor(self.bc)
+	term.setCursorPos(self.x, self.y)
+	term.setTextColor(self.fc)
+	local time = self.time
+	local text = tostring(time)
+	text = text:sub(_max(1, #text - self.w), -1)
+	term.write(text)
+end
+
+function UI.Timer(args)
+	local instance = UI.Widget(args)
+
+	instance.deltaTime = args.deltaTime or 0
+	instance.time = args.time or 0
+	instance.format = "%H:%M:%S"
+
+	instance.draw = Timer_draw
+	instance.updateTime = Timer_updateTime
+	instance.onEvent = Clock_onEvent
+	instance.pause = Timer_pause
+	instance.unpause = Timer_unpause
 
 	return instance
 end
@@ -2669,7 +2736,7 @@ end
 ---@param args LoadingBar Initialization table with fields above
 function UI.LoadingBar(args)
 	args.h = 1
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.orientation = orientation or "center"
 	instance.bc = args.bc
@@ -2766,7 +2833,7 @@ end
 ---@return table object dropdown
 function UI.Dropdown(args)
 	args.h = 1
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.array = args.array or {}
 	instance.item_index = 1
@@ -2874,7 +2941,7 @@ end
 ---@return table object slider
 function UI.Slider(args)
 	args.h = 1
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.held = false
 	instance.arr = args.arr or {}
@@ -2976,7 +3043,7 @@ end
 ---@param args TabBar Initialization table with fields above
 ---@return table object TabBar
 function UI.TabBar(args)
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.selected = 0
 	instance.tabs = {}
@@ -3487,7 +3554,7 @@ end
 ---@param args TreeView Initialization table with fields above
 ---@return table object TreeView
 function UI.TreeView(args)
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.tree = {}
 	instance.click_map = {}
@@ -3552,7 +3619,7 @@ local function TableView_draw(self)
 end
 
 function UI.TableView(args)
-	local instance = Widget(args)
+	local instance = UI.Widget(args)
 
 	instance.elements = args.elements or {}
 	instance.held = nil
