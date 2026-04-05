@@ -35,7 +35,9 @@ local EVENTS = {
 }
 
 local expect = require "cc.expect".expect
-local blittle = require "blittle_extended"
+-- local blittle = require "blittle_extended"
+local font = require "Font"
+local f = font.new()
 -- local system = require "braunnnsys"
 local c = require "cfunc"
 
@@ -129,6 +131,197 @@ end
 local function add_mixin(object, mixin)
 	for k, v in pairs(mixin) do
 		object[k] = v
+	end
+end
+
+local function Formula(n)
+	-- x^2 + y^2 = R (R = 1)
+	-- n^2 + a^2 = R -> n = sqrt(R - a^2)
+	if math.abs(n) <= 1 then
+		return math.sqrt(1 - n*n)
+	end
+end
+
+local function draw_curved_corners(x, y, w, h, r, bc)
+	local R = r
+	R = math.floor(math.min(math.floor(h / 2) - 1, math.floor(h / 2) - 1, R) + 0.5)
+	R = math.max(1, R)
+
+	local topLeft = {
+		x = x + R,
+		y = y + R
+	}
+	local botLeft = {
+		x = x + R,
+		y = y + h - R - 1
+	}
+	local topRight = {
+		x = x + w - R - 1,
+		y = y + R
+	}
+	local botRight = {
+		x = x + w - R - 1,
+		y = y + h - R - 1
+	}
+
+	--top left
+	-- x^2 + y^2 = 1
+	-- n^2 + a^2 = 1 -> n = sqrt(1 - a^2)
+	local sin45 = 0.70710678118655 -- ~ 1 / 1.4142135623731 ~ 1 / sqrt(2)
+	local centcord = math.floor(R * sin45 + 0.5)
+	for x = 0, centcord do
+		local constX = math.floor(x)
+		local constY = math.floor((Formula(x/R)*R))
+
+		term.setPixel(topLeft.x - constX, topLeft.y - constY, bc)
+		term.setPixel(topLeft.x - constY, topLeft.y - constX, bc)
+
+		term.setPixel(topRight.x + constX, topRight.y - constY, bc)
+		term.setPixel(topRight.x + constY, topRight.y - constX, bc)
+
+		term.setPixel(botLeft.x - constX, botLeft.y + constY, bc)
+		term.setPixel(botLeft.x - constY, botLeft.y + constX, bc)
+
+		term.setPixel(botRight.x + constX, botRight.y + constY, bc)
+		term.setPixel(botRight.x + constY, botRight.y + constX, bc)
+
+		paintutils.drawLine(topLeft.x - constX + 1, topLeft.y - constY + 1, topRight.x + constX + 1, topRight.y - constY + 1, bc)
+		paintutils.drawLine(topLeft.x - constY + 1, topLeft.y - constX + 1, topRight.x + constY + 1, topRight.y - constX + 1, bc)
+		paintutils.drawLine(botLeft.x - constX + 1, botLeft.y + constY + 1, botRight.x + constX + 1, botRight.y + constY + 1, bc)
+		paintutils.drawLine(botLeft.x - constY + 1, botLeft.y + constX + 1, botRight.x + constY + 1, botRight.y + constX + 1, bc)
+	end
+	term.drawPixels(x, y + R, bc, w, h - R * 2)
+end
+
+local function draw_circle(x, y, bg, Radius)
+	local cx = Radius
+	local cy = 0
+	local err = 0
+
+	while cx >= cy do
+		term.setPixel(x + cx, y + cy, bg)
+		term.setPixel(x + cy, y + cx, bg)
+		term.setPixel(x - cy, y + cx, bg)
+		term.setPixel(x - cx, y + cy, bg)
+		term.setPixel(x - cx, y - cy, bg)
+		term.setPixel(x - cy, y - cx, bg)
+		term.setPixel(x + cy, y - cx, bg)
+		term.setPixel(x + cx, y - cy, bg)
+
+		if err <= 0 then
+			cy = cy + 1
+			err = err + 2 * cy + 1
+		end
+		if err > 0 then
+			cx = cx - 1
+			err = err - 2 * cx + 1
+		end
+	end
+end
+
+-- local function draw_brezen(cX, cY, bg, R)
+-- 	local x = 0
+-- 	local y = R
+-- 	local delta = 1 - 2*R
+-- 	local err = 0
+-- 	while y >= x do
+-- 		term.setPixel(cX + x, cY + y, bg)
+-- 		term.setPixel(cX + x, cY - y, bg)
+-- 		term.setPixel(cX - x, cY + y, bg)
+-- 		term.setPixel(cX - x, cY - y, bg)
+-- 		term.setPixel(cX + y, cY + x, bg)
+-- 		term.setPixel(cX + y, cY - x, bg)
+-- 		term.setPixel(cX - y, cY + x, bg)
+-- 		term.setPixel(cX - y, cY - x, bg)
+-- 		err = 2 * (delta + y) - 1
+-- 		if delta < 0 and err <= 0 then
+-- 			x = x + 1
+-- 			delta = delta + 2 * x + 1
+-- 		elseif delta > 0 and err > 0 then
+-- 			y = y - 1
+-- 			delta = delta - 2 * y + 1
+-- 		else
+-- 			x = x+1
+-- 			y = y-1
+-- 			delta = delta + 2 * (x - y)
+-- 		end
+-- 	end
+-- end
+
+local function draw_brezen(cX, cY, bg, R)
+    -- Поддержка дробного радиуса (сайт тоже так делает)
+    R = R + 0.5   -- маленький сдвиг даёт лучшее округление, как на сайте
+
+    -- 1. Идём по X и считаем Y (горизонтальные пары)
+    for x = -R, R do
+        local yy = math.sqrt(R * R - x * x)
+        local y = math.floor(yy + 0.5)   -- округление как на сайте
+
+        term.setPixel(cX + x, cY + y, bg)
+        term.setPixel(cX + x, cY - y, bg)
+    end
+
+    -- 2. Идём по Y и считаем X (вертикальные пары) — убирает пропуски
+    for y = -R, R do
+        local xx = math.sqrt(R * R - y * y)
+        local x = math.floor(xx + 0.5)
+
+        term.setPixel(cX + x, cY + y, bg)
+        term.setPixel(cX - x, cY + y, bg)
+    end
+end
+
+-- local function draw_brezen(cX, cY, bg, R)
+--     R = math.floor(R + 0.5)
+
+--     if R < 0 then return end
+
+--     local x = 0
+--     local y = R
+--     local delta = 3 - 2 * R
+
+--     while x <= y do
+--         term.setPixel(cX + x, cY + y, bg)
+--         term.setPixel(cX + x, cY - y, bg)
+--         term.setPixel(cX - x, cY + y, bg)
+--         term.setPixel(cX - x, cY - y, bg)
+--         term.setPixel(cX + y, cY + x, bg)
+--         term.setPixel(cX + y, cY - x, bg)
+--         term.setPixel(cX - y, cY + x, bg)
+--         term.setPixel(cX - y, cY - x, bg)
+
+--         if delta < 0 then
+--             delta = delta + 4 * x + 6
+--             x = x + 1
+--         else
+--             delta = delta + 4 * (x - y) + 10
+--             x = x + 1
+--             y = y - 1
+--         end
+--     end
+-- end
+
+local function draw_filled_circle(cx, cy, bg, radius)
+	-- 1. Визначаємо межі квадрата (bounding box), в який вписане коло
+	local min_x = math.floor(cx - radius)
+	local max_x = math.ceil(cx + radius)
+	local min_y = math.floor(cy - radius)
+	local max_y = math.ceil(cy + radius)
+	
+	local r_sq = radius * radius
+
+	-- 2. Проходимось по всіх пікселях усередині цього квадрата
+	for py = min_y, max_y do
+		for px = min_x, max_x do
+			-- 3. Рахуємо відстань від поточного пікселя до ТОЧНОГО (дробового) центру
+			local dx = px - cx
+			local dy = py - cy
+			
+			-- Якщо піксель лежить у межах радіуса кола — зафарбовуємо
+			if (dx * dx + dy * dy) <= r_sq then
+				term.setPixel(px, py, bg)
+			end
+		end
 	end
 end
 
@@ -300,8 +493,8 @@ local function Container_onEvent(self, evt)
 	local event = evt[1]
 	-- if self.modal and EVENTS.TOP[event] and (self.modal.root.keyboard:onEvent(evt) or self.modal:onEvent(evt)) then return true end
 	if self.custom_handlers[event] then
-        return self.custom_handlers[event](table.unpack(evt, 2))
-    end
+		return self.custom_handlers[event](table.unpack(evt, 2))
+	end
 	if EVENTS.TOP[event] then
 		for i = #self.children, 1, -1 do
 			local child = self.children[i]
@@ -353,7 +546,7 @@ local function Root_tResize(self, evt)
 	if #evt > 1 then
 		self.w, self.h = evt[2], evt[3]
 	else
-		self.w, self.h = term.getSize()
+		self.w, self.h = term.getSize(1)
 	end
 	-- if self.onResize then self.onResize(self.w, self.h) end
 	for _, child in ipairs(self.children) do
@@ -396,7 +589,7 @@ local function Root_onEvent(self, evt)
 end
 
 local function Root_mainloop(self)
-	self:show()
+	Root_show(self)
 	while true do
 		local evt = {coroutine.yield()}
 		if evt[1] == "terminate" then
@@ -418,7 +611,7 @@ end
 ---@class Root
 ---@return table object root
 function UI.Root()
-	local w, h = term.getSize()
+	local w, h = term.getSize(1)
 	local instance = UI.Container({x = 1, y = 1, w = w, h = h})
 
 	instance.focus = nil
@@ -427,7 +620,6 @@ function UI.Root()
 	instance.redraw = Root_redraw
 	instance.onEvent = Root_onEvent
 	instance.mainloop = Root_mainloop
-	instance.show = Root_show
 
 	return instance
 end
@@ -438,7 +630,7 @@ local function Box_onLayout(self)
 end
 
 local function Box_draw(self)
-	paintutils.drawFilledBox(self.x, self.y, self.x + self.w - 1, self.y + self.h - 1, self.bc)
+	term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
 end
 
 ---@class Box
@@ -542,51 +734,61 @@ function UI.ScrollBox(args)
 end
 
 local function Tumbler_draw(self)
-	local frame = self.animation_frames[self.current_frame]
-	for i = 1, 2 do
-		local p = frame[i]
-		term.setBackgroundColor(p.bgcol)
-		term.setTextColor(p.txtcol)
-		term.setCursorPos(self.x + i - 1, self.y)
-		term.write(p.char)
-	end
+	-- local frame = self.animation_frames[self.current_frame]
+	-- for i = 1, 2 do
+	-- 	local p = frame[i]
+	-- 	term.setBackgroundColor(p.bgcol)
+	-- 	term.setTextColor(p.txtcol)
+	-- 	term.setCursorPos(self.x + i - 1, self.y)
+	-- 	term.write(p.char)
+	-- end
+	-- term.drawPixels(self.x, self.y, colors.green, self.w, self.h)
+	-- draw_curved_corners(self.x, self.y, self.w, self.h, self.radius, self.bc)
+	-- draw_curved_corners(20, 20, 15, 15, 7, self.fc)
+	local r = math.min(self.h - 1, self.w)/2
+	-- local d = math.floor(r/2)
+	local y = r + self.y
+	local x = r + self.x
+	-- draw_filled_circle(x + self.w - r*2, y, self.fc, r * 0.75)
+	-- draw_filled_circle(self.x+10, self.y+10, self.fc, 4)
+	draw_brezen(self.x + 10, self.y + 10, self.bc, 5)
 end
 
 local function Tumbler_startAnimation(self,direction)
-	if self.animating then return end
-	self.animating = true
-	self.animation_direction = direction
-	self.current_frame = (direction == "to_on") and "anim1" or "anim2"
-	self.dirty = true
-	self.timer_id = os.startTimer(self.animation_speed)
+	-- if self.animating then return end
+	-- self.animating = true
+	-- self.animation_direction = direction
+	-- self.current_frame = (direction == "to_on") and "anim1" or "anim2"
+	-- self.dirty = true
+	-- self.timer_id = os.startTimer(self.animation_speed)
 end
 
 local function Tumbler_updateAnimation(self)
-	if self.animation_direction == "to_on" then
-		if self.current_frame == "anim1" then
-			self.current_frame = "anim2"
-			self.timer_id = os.startTimer(self.animation_speed)
-		elseif self.current_frame == "anim2" then
-			self.current_frame = "on"
-			self.animating = false
-			self.on = true
-		end
-	elseif self.animation_direction == "to_off" then
-		if self.current_frame == "anim2" then
-			self.current_frame = "anim1"
-			self.timer_id = os.startTimer(self.animation_speed)
-		elseif self.current_frame == "anim1" then
-			self.current_frame = "off"
-			self.animating = false
-			self.on = false
-		end
-	end
-	self.dirty = true
+	-- if self.animation_direction == "to_on" then
+	-- 	if self.current_frame == "anim1" then
+	-- 		self.current_frame = "anim2"
+	-- 		self.timer_id = os.startTimer(self.animation_speed)
+	-- 	elseif self.current_frame == "anim2" then
+	-- 		self.current_frame = "on"
+	-- 		self.animating = false
+	-- 		self.on = true
+	-- 	end
+	-- elseif self.animation_direction == "to_off" then
+	-- 	if self.current_frame == "anim2" then
+	-- 		self.current_frame = "anim1"
+	-- 		self.timer_id = os.startTimer(self.animation_speed)
+	-- 	elseif self.current_frame == "anim1" then
+	-- 		self.current_frame = "off"
+	-- 		self.animating = false
+	-- 		self.on = false
+	-- 	end
+	-- end
+	-- self.dirty = true
 end
 
 local function Tumbler_onMouseDown(self, btn, x, y)
 	if not self.animating then
-		self:startAnimation(self.on and "to_off" or "to_on")
+		-- self:startAnimation(self.on and "to_off" or "to_on")
 		self:pressed()
 	end
 	return true
@@ -611,32 +813,15 @@ end
 ---@param args Tumbler Initialization table with fields above
 ---@return table object tumbler (switcher)
 function UI.Tumbler(args)
-	args.w = 2; args.h = 1
 	local instance = UI.Widget(args)
 
+	instance.radius = args.radius
 	instance.on = args.on or false
 	instance.bc = args.bc or colors.gray
 	instance.bc_alt = args.bc_alt or colors.blue
 	instance.fc = args.fc or colors.white
 	instance.animating = false
-	instance.animation_frames = {
-		off = {
-			{char = "\149", txtcol = instance.fc, bgcol = instance.bc},
-			{char = " ", txtcol = instance.bc, bgcol = instance.bc}
-		},
-		anim1 = {
-			{char = "\149", txtcol = instance.bc_alt, bgcol = instance.fc},
-			{char = " ", txtcol = instance.bc, bgcol = instance.bc}
-		},
-		anim2 = {
-			{char = " ", txtcol = instance.bc_alt, bgcol = instance.bc_alt},
-			{char = "\149", txtcol = instance.fc, bgcol = instance.bc}
-		},
-		on = {
-			{char = " ", txtcol = instance.bc_alt, bgcol = instance.bc_alt},
-			{char = "\149", txtcol = instance.bc_alt, bgcol = instance.fc}
-		}
-	}
+
 	instance.current_frame = instance.on and "on" or "off"
 	instance.animation_speed = 0.05  -- Задержка между кадрами в секундах
 	instance.timer_id = nil
@@ -854,113 +1039,114 @@ end
 -- end
 
 local function Label_draw(self, bg_override, txtcol_override)
-	bg_override = bg_override or self.bc
-	txtcol_override = txtcol_override or self.fc
-	local lines = {}
+	f:draw(self.text, self.x, self.y, self.fc)
+	-- bg_override = bg_override or self.bc
+	-- txtcol_override = txtcol_override or self.fc
+	-- local lines = {}
 
-	-- Split text into paragraphs based on explicit newlines
-	local paragraphs = {}
-	local start = 1
-	local pos = string.find(self.text, "\n", start, true)
-	while pos do
-		table.insert(paragraphs, string.sub(self.text, start, pos - 1))
-		start = pos + 1
-		pos = string.find(self.text, "\n", start, true)
-	end
-	table.insert(paragraphs, string.sub(self.text, start))
+	-- -- Split text into paragraphs based on explicit newlines
+	-- local paragraphs = {}
+	-- local start = 1
+	-- local pos = string.find(self.text, "\n", start, true)
+	-- while pos do
+	-- 	table.insert(paragraphs, string.sub(self.text, start, pos - 1))
+	-- 	start = pos + 1
+	-- 	pos = string.find(self.text, "\n", start, true)
+	-- end
+	-- table.insert(paragraphs, string.sub(self.text, start))
 
-	for _, para in ipairs(paragraphs) do
-		if #lines >= self.h then break end
-		local mass = {}
-		for w in string.gmatch(para, "%S+") do
-			table.insert(mass, w)
-		end
-		if #mass == 0 then
-			-- Empty paragraph (or only whitespace), add a blank line
-			if #lines < self.h then
-				table.insert(lines, "")
-			end
-		else
-			local row_txt = ""
-			local i = 1
-			while i <= #mass do
-				if #lines >= self.h then break end
-				local word = mass[i]
-				if #word > self.w then
-					local remainder = _sub(word, self.w + 1)
-					if remainder ~= "" then
-						table.insert(mass, i + 1, remainder)
-					end
-					mass[i] = _sub(word, 1, self.w)
-					word = mass[i]
-				end
-				local space_len = (row_txt == "" and 0 or 1)
-				if #row_txt + space_len + #word <= self.w then
-					row_txt = row_txt .. (row_txt == "" and "" or " ") .. word
-					i = i + 1
-				else
-					if row_txt ~= "" then
-						table.insert(lines, row_txt)
-						row_txt = ""
-					end
-				end
-			end
-			if row_txt ~= "" and #lines < self.h then
-				table.insert(lines, row_txt)
-			end
-		end
-	end
+	-- for _, para in ipairs(paragraphs) do
+	-- 	if #lines >= self.h then break end
+	-- 	local mass = {}
+	-- 	for w in string.gmatch(para, "%S+") do
+	-- 		table.insert(mass, w)
+	-- 	end
+	-- 	if #mass == 0 then
+	-- 		-- Empty paragraph (or only whitespace), add a blank line
+	-- 		if #lines < self.h then
+	-- 			table.insert(lines, "")
+	-- 		end
+	-- 	else
+	-- 		local row_txt = ""
+	-- 		local i = 1
+	-- 		while i <= #mass do
+	-- 			if #lines >= self.h then break end
+	-- 			local word = mass[i]
+	-- 			if #word > self.w then
+	-- 				local remainder = _sub(word, self.w + 1)
+	-- 				if remainder ~= "" then
+	-- 					table.insert(mass, i + 1, remainder)
+	-- 				end
+	-- 				mass[i] = _sub(word, 1, self.w)
+	-- 				word = mass[i]
+	-- 			end
+	-- 			local space_len = (row_txt == "" and 0 or 1)
+	-- 			if #row_txt + space_len + #word <= self.w then
+	-- 				row_txt = row_txt .. (row_txt == "" and "" or " ") .. word
+	-- 				i = i + 1
+	-- 			else
+	-- 				if row_txt ~= "" then
+	-- 					table.insert(lines, row_txt)
+	-- 					row_txt = ""
+	-- 				end
+	-- 			end
+	-- 		end
+	-- 		if row_txt ~= "" and #lines < self.h then
+	-- 			table.insert(lines, row_txt)
+	-- 		end
+	-- 	end
+	-- end
 
-	local horiz_align = "center"
-	if string_find(self.align, "left") then
-		horiz_align = "left"
-	elseif string_find(self.align, "right") then
-		horiz_align = "right"
-	end
+	-- local horiz_align = "center"
+	-- if string_find(self.align, "left") then
+	-- 	horiz_align = "left"
+	-- elseif string_find(self.align, "right") then
+	-- 	horiz_align = "right"
+	-- end
 
-	local num_lines = #lines
-	local vert_align = "center"
-	if string_find(self.align, "top") then
-		vert_align = "top"
-	elseif string_find(self.align, "bottom") then
-		vert_align = "bottom"
-	end
+	-- local num_lines = #lines
+	-- local vert_align = "center"
+	-- if string_find(self.align, "top") then
+	-- 	vert_align = "top"
+	-- elseif string_find(self.align, "bottom") then
+	-- 	vert_align = "bottom"
+	-- end
 
-	local start_y = self.y
-	if vert_align == "top" then
-		start_y = self.y
-	elseif vert_align == "bottom" then
-		start_y = self.y + self.h - num_lines
-	else  -- center
-		start_y = self.y + _floor((self.h - num_lines) / 2)
-	end
-	start_y = _max(start_y, self.y)
+	-- local start_y = self.y
+	-- if vert_align == "top" then
+	-- 	start_y = self.y
+	-- elseif vert_align == "bottom" then
+	-- 	start_y = self.y + self.h - num_lines
+	-- else  -- center
+	-- 	start_y = self.y + _floor((self.h - num_lines) / 2)
+	-- end
+	-- start_y = _max(start_y, self.y)
 
-	for i = self.y, start_y - 1 do
-		term.setBackgroundColor(bg_override); term.setCursorPos(self.x, i); term.setTextColor(txtcol_override); term.write(_rep(" ", self.w))
-	end
+	-- for i = self.y, start_y - 1 do
+	-- 	term.setBackgroundColor(bg_override); term.setCursorPos(self.x, i); term.setTextColor(txtcol_override); term.write(_rep(" ", self.w))
+	-- end
 
-	for j = 1, num_lines do
-		local line = lines[j]
-		local line_len = #line
-		local x_pos = self.x
-		if horiz_align == "left" then
-			x_pos = self.x
-		elseif horiz_align == "right" then
-			x_pos = self.x + self.w - line_len
-		else  -- center
-			x_pos = self.x + _floor((self.w - line_len) / 2)
-		end
-		local left_pad = _rep(" ", x_pos - self.x)
-		local right_pad = _rep(" ", self.w - (x_pos - self.x + line_len))
-		local full_line = left_pad .. line .. right_pad
-		term.setBackgroundColor(bg_override); term.setCursorPos(self.x, start_y + j - 1); term.setTextColor(txtcol_override); term.write(full_line)
-	end
+	-- for j = 1, num_lines do
+	-- 	local line = lines[j]
+	-- 	local line_len = #line
+	-- 	local x_pos = self.x
+	-- 	if horiz_align == "left" then
+	-- 		x_pos = self.x
+	-- 	elseif horiz_align == "right" then
+	-- 		x_pos = self.x + self.w - line_len
+	-- 	else  -- center
+	-- 		x_pos = self.x + _floor((self.w - line_len) / 2)
+	-- 	end
+	-- 	local left_pad = _rep(" ", x_pos - self.x)
+	-- 	local right_pad = _rep(" ", self.w - (x_pos - self.x + line_len))
+	-- 	local full_line = left_pad .. line .. right_pad
+	-- 	term.setBackgroundColor(bg_override); term.setCursorPos(self.x, start_y + j - 1); term.setTextColor(txtcol_override); term.write(full_line)
+	-- end
 
-	local end_y = start_y + num_lines - 1
-	for i = end_y + 1, self.y + self.h - 1 do
-		term.setBackgroundColor(bg_override); term.setCursorPos(self.x, i); term.setTextColor(txtcol_override); term.write(_rep(" ", self.w))
-	end
+	-- local end_y = start_y + num_lines - 1
+	-- for i = end_y + 1, self.y + self.h - 1 do
+	-- 	term.setBackgroundColor(bg_override); term.setCursorPos(self.x, i); term.setTextColor(txtcol_override); term.write(_rep(" ", self.w))
+	-- end
 end
 
 local function Label_setText(self, text)
@@ -993,20 +1179,32 @@ function UI.Label(args)
 end
 
 local function Button_draw(self)
+	local bc = self.bc
+	local fc = self.fc
+	-- if self.held then
+	-- 	if self.fc_cl then
+	-- 		local bg = self.bc_cl or self.bc
+	-- 		Label_draw(self, bg, self.fc_cl)
+	-- 	else
+	-- 		Label_draw(self, self.fc, self.bc)
+	-- 	end
+	-- else
+	-- 	if self.hovered and self.bc_hv and self.fc_hv then
+	-- 		Label_draw(self, self.bc_hv, self.fc_hv)
+	-- 	else
+	-- 		Label_draw(self, self.bc, self.fc)
+	-- 	end
+	-- end
 	if self.held then
-		if self.fc_cl then
-			local bg = self.bc_cl or self.bc
-			Label_draw(self, bg, self.fc_cl)
-		else
-			Label_draw(self, self.fc, self.bc)
-		end
-	else
-		if self.hovered and self.bc_hv and self.fc_hv then
-			Label_draw(self, self.bc_hv, self.fc_hv)
-		else
-			Label_draw(self, self.bc, self.fc)
-		end
+		bc = self.bc_cl or self.fc
+		fc = self.fc_cl or self.bc
 	end
+	if self.radius then
+		draw_curved_corners(self.x ,self.y, self.w, self.h, self.radius, bc)
+	else
+		term.drawPixels(self.x, self.y, bc, self.w, self.h)
+	end
+	f:draw(self.text, self.x, self.y, fc)
 end
 
 local function Button_onMouseDown(self, btn, x, y)
@@ -1061,6 +1259,7 @@ function UI.Button(args)
 	instance.text = args.text or ""
 	instance.held = false
 	instance.hovered = false
+	instance.radius = args.radius
 	instance.align = args.align or "center"
 
 	instance.draw = Button_draw
