@@ -1,31 +1,13 @@
--- Chess.lua - Логічний двигун гри
-local UI = require 'UI'
-
-local Chess = {}
+local _Game = {}
 
 local fileToX = { a = 1, b = 2, c = 3, d = 4, e = 5, f = 6, g = 7, h = 8 }
-local xToFile = { [1] = "a", [2] = "b", [3] = "c", [4] = "d", [5] = "e", [6] = "f", [7] = "g", [8] = "h" }
-local CELL_W = 3
-
-Chess.pieceGlyph = {
-    wp = "\105", wn = "\163", wb = "1", wr = "\207", wq = "\5", wk = "\214",
-    bp = "\105", bn = "\163", bb = "1", br = "\207", bq = "\5", bk = "\214"
-}
 
 local function opposite(c) return c == "w" and "b" or "w" end
-local function pieceColor(p) return p and p:sub(1, 1) or nil end
 local function pieceKind(p) return p and p:sub(2, 2) or nil end
 local function inBounds(x, y) return x >= 1 and x <= 8 and y >= 1 and y <= 8 end
-local function sqName(x, y) return Chess.xToFile[x] .. tostring(9 - y) end
-
-local function makeBoard()
-	local board = {}
-	for i = 1, 8 do board[i] = {} end
-	return board
-end
 
 local function cloneState(src)
-	local dst = Chess.Game(makeBoard())
+	local dst = _Game.Game(_Game.makeBoard())
 
 	dst.turn = src.turn
 	dst.castling = {
@@ -107,7 +89,7 @@ local function squareAttacked(self, x, y, byColor)
 		while inBounds(nx, ny) do
 			local p = b[ny][nx]
 			if p then
-				if pieceColor(p) == byColor then
+				if _Game.pieceColor(p) == byColor then
 					local k = pieceKind(p)
 					if (rookLike and (k == "r" or k == "q")) or (bishopLike and (k == "b" or k == "q")) then
 					return true
@@ -132,7 +114,7 @@ end
 local function pseudoMovesFrom(self, x, y)
 	local p = self.board[y][x]
 	if not p then return {} end
-	local c = pieceColor(p)
+	local c = _Game.pieceColor(p)
 	local k = pieceKind(p)
 	local moves = {}
 
@@ -159,7 +141,7 @@ local function pseudoMovesFrom(self, x, y)
 		local nx, nyc = x + dx, y + dir
 		if inBounds(nx, nyc) then
 			local target = self.board[nyc][nx]
-			if target and pieceColor(target) ~= c then
+			if target and _Game.pieceColor(target) ~= c then
 				add({ fx = x, fy = y, tx = nx, ty = nyc, piece = p, captured = target, promo = (nyc == promoRow) })
 			end
 			if self.enPassant and self.enPassant.x == nx and self.enPassant.y == nyc then
@@ -177,7 +159,7 @@ local function pseudoMovesFrom(self, x, y)
 		local nx, ny = x + d[1], y + d[2]
 		if inBounds(nx, ny) then
 			local target = self.board[ny][nx]
-			if not target or pieceColor(target) ~= c then
+			if not target or _Game.pieceColor(target) ~= c then
 				add({ fx = x, fy = y, tx = nx, ty = ny, piece = p, captured = target })
 			end
 		end
@@ -205,7 +187,7 @@ local function pseudoMovesFrom(self, x, y)
 			if not target then
 				add({ fx = x, fy = y, tx = nx, ty = ny, piece = p, captured = nil })
 			else
-				if pieceColor(target) ~= c then
+				if _Game.pieceColor(target) ~= c then
 					add({ fx = x, fy = y, tx = nx, ty = ny, piece = p, captured = target })
 				end
 				break
@@ -222,7 +204,7 @@ local function pseudoMovesFrom(self, x, y)
 					local nx, ny = x + dx, y + dy
 					if inBounds(nx, ny) then
 						local target = self.board[ny][nx]
-						if not target or pieceColor(target) ~= c then
+						if not target or _Game.pieceColor(target) ~= c then
 							add({ fx = x, fy = y, tx = nx, ty = ny, piece = p, captured = target })
 						end
 					end
@@ -261,10 +243,11 @@ end
 
 local function applyMove(self, m, promoChoice)
 	local p = self.board[m.fy][m.fx]
-	local c = pieceColor(p)
+	local c = _Game.pieceColor(p)
 	local k = pieceKind(p)
 	local captured = m.captured
-
+	local isCapture = false
+	if captured then isCapture = true end
 	-- update castling rights
 	if k == "k" then
 	if c == "w" then self.castling.wk, self.castling.wq = false, false
@@ -279,7 +262,7 @@ local function applyMove(self, m, promoChoice)
 	end
 	end
 	if captured and pieceKind(captured) == "r" then
-		if pieceColor(captured) == "w" then
+		if _Game.pieceColor(captured) == "w" then
 			if m.tx == 1 and m.ty == 8 then self.castling.wq = false end
 			if m.tx == 8 and m.ty == 8 then self.castling.wk = false end
 		else
@@ -291,8 +274,9 @@ local function applyMove(self, m, promoChoice)
 	self.board[m.fy][m.fx] = nil
 
 	if m.enPassant then
-	local capY = (c == "w") and (m.ty + 1) or (m.ty - 1)
-	self.board[capY][m.tx] = nil
+		isCapture = true
+		local capY = (c == "w") and (m.ty + 1) or (m.ty - 1)
+		self.board[capY][m.tx] = nil
 	end
 
 	if m.castle == "K" then
@@ -333,12 +317,13 @@ local function applyMove(self, m, promoChoice)
 	if k == "p" or captured then self.halfmove = 0 else self.halfmove = self.halfmove + 1 end
 	if self.turn == "b" then self.fullmove = self.fullmove + 1 end
 	self.turn = opposite(self.turn)
+	return isCapture
 end
 
 local function legalMovesFrom(self, x, y)
 	local p = self.board[y][x]
-	if not p or pieceColor(p) ~= self.turn then return {} end
-	local color = pieceColor(p)
+	if not p or _Game.pieceColor(p) ~= self.turn then return {} end
+	local color = _Game.pieceColor(p)
 	local res = {}
 	for _, m in ipairs(self:pseudoMovesFrom(x, y)) do
 		local test = cloneState(self)
@@ -354,7 +339,7 @@ local function allLegalMoves(self, color)
 	local res = {}
 	for y = 1, 8 do
 		for x = 1, 8 do
-			if self.board[y][x] and pieceColor(self.board[y][x]) == color then
+			if self.board[y][x] and _Game.pieceColor(self.board[y][x]) == color then
 				local pseudo = self:pseudoMovesFrom(x, y)
 				for _, m in ipairs(pseudo) do
 					local test = cloneState(self)
@@ -386,14 +371,12 @@ end
 
 local function updateGameEnd(self)
 	if self.halfmove >= 80 then
-		self.over = true
 		self.result = "Draw by the 40-move rule."
-		self.message = self.result
+		self:gameOver(self.result)
 		return
 	end
 	local moves = self:allLegalMoves(self.turn)
 	if #moves == 0 then
-		self.over = true
 		if self:inCheck(self.turn) then
 			local winner = opposite(self.turn)
 			self.result = ((winner == "w") and "White" or "Black") .. " wins by checkmate."
@@ -401,19 +384,79 @@ local function updateGameEnd(self)
 		else
 			self.result = "Stalemate."
 		end
-		self.message = self.result
+		self:gameOver(self.result)
 	end
 end
 
-local function addToHistory(self, fx, fy, tx, ty)
-	local data = xToFile[fx] .. 9 - fy .. '\26' .. xToFile[tx] .. 9 - ty
+local function addToHistory(self, san, movingTeam)
 	local n = #self.history
-
-	if self.turn == 'w' then
-		self.history[n + 1] = tostring(n + 1) .. (' '):rep(4 - #(tostring(n + 1))) .. data
-	elseif self.turn == 'b' then
-		self.history[n] = self.history[n] .. ' ' .. data
+	local CONST_SAN_W = 6 -- max notation Width
+	local CONST_NSS_W = 3 -- num + dot + spaces Width
+	if movingTeam == 'w' then
+		local moveNumber = n + 1
+		-- self.history[n + 1] = tostring(moveNumber) .. ". " .. san
+		local n_str = tostring(moveNumber)
+		self.history[n + 1] = n_str .. (' '):rep(CONST_NSS_W - #n_str) .. san
+	elseif movingTeam == 'b' then
+		local currentText = self.history[n] or ""
+		-- self.history[n] = currentText .. "   " .. san
+		self.history[n] = currentText .. (' '):rep((CONST_SAN_W+CONST_NSS_W) - #currentText) .. san
 	end
+end
+
+local function getSAN(self, move, promoChoice)
+	-- 1. Рокіровка
+	if move.castle == "K" then return "O-O" end
+	if move.castle == "Q" then return "O-O-O" end
+
+	local pieceType = pieceKind(move.piece)
+	local isCapture = move.captured ~= nil or move.enPassant
+	local san = ""
+
+	if pieceType == "p" then
+		-- Для пішака фіксуємо літеру вертикалі при взятті
+		if isCapture then
+			san = _Game.xToFile[move.fx] .. "x"
+		end
+	else
+		-- Для інших фігур велика літера (N, B, R, Q, K)
+		san = pieceType:upper()
+
+		-- Уникнення двозначності (Disambiguation)
+		local ambigFile, ambigRank = false, false
+		local color = _Game.pieceColor(move.piece)
+
+		for _, otherMove in ipairs(self:allLegalMoves(color)) do
+			if (otherMove.fx ~= move.fx or otherMove.fy ~= move.fy)
+			   and pieceKind(otherMove.piece) == pieceType
+			   and otherMove.tx == move.tx and otherMove.ty == move.ty then
+				-- Інша фігура того ж типу може піти сюди ж
+				if otherMove.fx == move.fx then
+					ambigRank = true -- На одній вертикалі, вказуємо горизонталь
+				else
+					ambigFile = true -- На різних вертикалях, вказуємо вертикаль
+				end
+			end
+		end
+
+		if ambigFile then
+			san = san .. _Game.xToFile[move.fx]
+		elseif ambigRank then
+			san = san .. (9 - move.fy)
+		end
+
+		if isCapture then san = san .. "x" end
+	end
+
+	-- Додаємо цільову клітинку
+	san = san .. _Game.xToFile[move.tx] .. (9 - move.ty)
+
+	-- Додаємо перетворення пішака
+	if move.promo then
+		san = san .. "=" .. string.upper(promoChoice or "q")
+	end
+
+	return san
 end
 
 local function moveSelectedTo(self, x, y, selected)
@@ -427,24 +470,38 @@ local function moveSelectedTo(self, x, y, selected)
 	end
 	if not chosen then return false end
 
-	local promo = nil
-	if chosen.promo then
-		promo = "q"
-		-- if the pawn promotion choice is desired later, this is the default.
-	end
-	self:addToHistory(selected.x, selected.y, x, y)
+	local promo = chosen.promo and "q" or nil
+	local movingTeam = self.turn
+
+	-- 1. Генеруємо базовий SAN до зміни стану дошки
+	local san = self:getSAN(chosen, promo)
+
+	-- 2. Застосовуємо хід
 	local status = 'move'
-	if self.board[y][x] then status = 'capture' end
-	self:applyMove(chosen, promo)
+	if self:applyMove(chosen, promo) then status = 'capture' end
+
+	-- 3. Перевіряємо шах/мат (вже для наступного гравця)
 	self.legalMoves = {}
+	local movesLeft = #self:allLegalMoves(self.turn)
+	local isCheckNow = self:inCheck(self.turn)
+
+	if movesLeft == 0 and isCheckNow then
+		san = san .. "#"
+	elseif isCheckNow then
+		san = san .. "+"
+	end
+
+	-- 4. Записуємо чистий SAN в історію
+	self:addToHistory(san, movingTeam)
+
+	-- Оновлюємо статус гри
 	self.message = (self.turn == "w" and "White" or "Black") .. " to move."
-	if self:inCheck(self.turn) then
+	if isCheckNow then
 		self.message = (self.turn == "w" and "White" or "Black") .. " to move: check."
 	end
 
 	self:playSound(status)
 	self:updateGameEnd()
-	-- board.dirty = true
 	self:refreshStatus()
 	return true
 end
@@ -475,7 +532,7 @@ local function parseFEN(fen)
 		return nil, "FEN placement must contain 8 ranks."
 	end
 
-	local boardData = makeBoard()
+	local boardData = _Game.makeBoard()
 	local validPieces = {
 	p = true, r = true, n = true, b = true, q = true, k = true,
 	P = true, R = true, N = true, B = true, Q = true, K = true,
@@ -571,7 +628,14 @@ local function restartGame(self, fen)
 end
 local function refreshStatus(self) end
 
-function Chess.Game(board)
+local function gameOver(self, message)
+	self.over = true
+	self.message = message
+	self:refreshStatus()
+	self:overed()
+end
+
+function _Game.Game(board)
 	return {
 		board = board,
 		turn = "w",
@@ -601,202 +665,9 @@ function Chess.Game(board)
 		loadFEN = loadFEN,
 		restartGame = restartGame,
 		refreshStatus = refreshStatus,
+		gameOver = gameOver,
+		getSAN = getSAN,
 	}
 end
 
-local function clearSelection(board, game)
-	board.selected = nil
-	game.legalMoves = {}
-	board.dirty = true
-	-- refreshStatus()
-end
-
-local function selectSquare(self, x, y)
-	local game = self.game
-	if game.over then return end
-	local p = self.board[y][x]
-	if p and pieceColor(p) == game.turn then
-		self.selected = { x = x, y = y }
-		game.legalMoves = game:legalMovesFrom(x, y)
-		self.dirty = true
-		-- refreshStatus()
-	else
-		clearSelection(self, game)
-	end
-end
-
-local function squareAtMouse(self, mx, my)
-	local relX = mx - self.x + 1
-	local relY = my - self.y + 1
-	if relX < 2 or relX > 25 or relY < 2 or relY > 9 then
-		return nil
-	end
-	local file = math.floor((relX - 2) / CELL_W) + 1
-	local rankFromTop = relY - 1
-	if file < 1 or file > 8 or rankFromTop < 1 or rankFromTop > 8 then
-		return nil
-	end
-	-- local x = file
-	local x = self.rotate and file or 9 - file
-	local y = self.rotate and rankFromTop or 9 - rankFromTop
-	return x, y
-end
-
-local function onMouseDown(self, btn, mx, my)
-	local game = self.game
-	if game.team and (game.turn ~= game.team) then return end
-	local x, y = self:squareAtMouse(mx, my)
-	if not x then return true end
-
-	if game.over then return true end
-
-	if self.selected then
-		local sX, sY = self.selected.x, self.selected.y
-		if game:moveSelectedTo(x, y, self.selected) then
-			self.selected = nil
-			self.dirty = true
-			self:pressed(sX * 10 + sY, x * 10 + y)
-			return true
-		end
-		local p = self.board[y][x]
-		if p and pieceColor(p) == game.turn then
-			self:selectSquare(x, y)
-		else
-			clearSelection(self, game)
-		end
-	else
-		self:selectSquare(x, y)
-	end
-	return true
-end
-
-local function onMouseUp(self, btn, mx, my)
-	local game = self.game
-	local x, y = self:squareAtMouse(mx, my)
-	if not x then return true end
-
-	if game.over then return true end
-	if self.selected then
-		local sx, sy = self.selected.x, self.selected.y
-		if game:moveSelectedTo(x, y, self.selected) then
-			self.selected = nil
-			self.dirty = true
-			self:pressed(sx * 10 + sy, x * 10 + y)
-			return true
-		end
-	else
-		return true
-	end
-	return true
-end
-
-local function draw(self)
-	local game = self.game
-	local function cellLeft(file)
-		return self.rotate and self.x + 1 + (file - 1) * CELL_W or self.x + 1 + (9 - file - 1) * CELL_W
-	end
-	local function cellTop(rankFromTop)
-		return self.rotate and self.y + rankFromTop or self.y + (9 - rankFromTop)
-	end
-
-	-- background + coordinates
-	term.setBackgroundColor(self.bc)
-	term.setTextColor(self.fc)
-
-	-- top files
-	term.setCursorPos(self.x + 2, self.y)
-	for i = 1, 8 do
-		term.write(xToFile[not self.rotate and 9 - i or i] .. "  ")
-	end
-
-	for rankFromTop = 1, 8 do
-		local y = 9 - rankFromTop
-		local sy = cellTop(rankFromTop)
-
-		term.setCursorPos(self.x, sy)
-		term.write(tostring(y))
-
-		for file = 1, 8 do
-			local sx = cellLeft(file)
-			local p = self.board[rankFromTop][file]
-			local base = ((file + rankFromTop) % 2 == 0) and colors.orange or colors.brown
-			local bg = base
-			local fg = (bg == BOARD_BG_A) and colors.white or colors.black
-			local text = "   "
-
-			local isSelected = self.selected and self.selected.x == file and self.selected.y == rankFromTop
-			local targetType = nil
-			if self.selected then
-				for _, m in ipairs(game.legalMoves) do
-					if m.tx == file and m.ty == rankFromTop then
-					targetType = m.captured and "capture" or "move"
-					break
-					end
-				end
-			end
-
-			if targetType == "move" then
-				bg = base
-				fg = colors.green
-				text = " \7 "
-			elseif targetType == "capture" then
-				bg = colors.red
-				fg = colors.white
-				if p then
-					local glyph = Chess.pieceGlyph[p] or "?"
-					text = " " .. glyph .. " "
-				else
-					text = " x "
-				end
-			elseif isSelected then
-				bg = colors.green
-				fg = colors.black
-				if p then
-					local glyph = Chess.pieceGlyph[p] or "?"
-					text = " " .. glyph .. " "
-				end
-			elseif p then
-				local glyph = Chess.pieceGlyph[p] or "?"
-				text = " " .. glyph .. " "
-				fg = (pieceColor(p) == "w") and colors.white or colors.black
-			end
-
-			term.setBackgroundColor(bg)
-			term.setTextColor(fg)
-			term.setCursorPos(sx, sy)
-			term.write(text)
-		end
-
-		term.setBackgroundColor(colors.black)
-		term.setTextColor(colors.lightGray)
-		term.setCursorPos(self.x + 25, sy)
-		term.write(tostring(y))
-	end
-
-	-- bottom files
-	term.setCursorPos(self.x + 2, self.y + 9)
-	for i = 1, 8 do
-		term.write(xToFile[not self.rotate and 9 - i or i] .. "  ")
-	end
-end
-
-function Chess.Board(args)
-	local instance = UI.Box(args)
-
-    instance.board = makeBoard()
-	instance.game = nil
-	instance.selected = nil
-	instance.rotate = true
-
-    instance.draw = draw
-    instance.onMouseDown = onMouseDown
-    instance.onMouseUp = onMouseUp
-    instance.selectSquare = selectSquare
-    instance.squareAtMouse = squareAtMouse
-
-	return instance
-end
-
-
-
-return Chess
+return _Game

@@ -1,39 +1,15 @@
 local decoder = require('cc.audio.dfpwm').make_decoder()
--- local S = require 'MyS'
 
 local _speaker = {}
 
 local musicFile, speaker
 local volume = 3
 
-local speakers = {peripheral.find('speaker')}
-if #speakers == 0 and periphemu then
+if periphemu then
 	periphemu.create('left', 'speaker')
-	speakers = {peripheral.find('speaker')}
 end
+local speakers = {peripheral.find('speaker')}
 speaker = speakers[1]
-
-local function play(self, path)
-	-- self.filePath = path or self.filePath
-	-- local total_chunks = getTotalChunks(self.filePath)
-	-- timeLine.arr = {}
-	-- for i = 1, total_chunks do
-	-- 	timeLine.arr[i] = i
-	-- end
-
-	-- self.music_file = fs.open(self.filePath, "rb")
-	-- if not self.music_file then error("Failed to open file: " .. self.filePath) end
-	-- local ok, fileSize = pcall(function() return self.music_file.seek("end") end)
-	-- fileSize = tonumber(fileSize) or 0
-
-	-- self.data_end = fileSize
-	-- if cache[temp].meta_start then
-	-- 	self.data_end = cache[temp].meta_start - 1
-	-- end
-
-	-- play_at_chunk(1)
-	-- self:play_next_chunk()
-end
 
 function _speaker.getOutputs()
 	local output = {}
@@ -45,8 +21,7 @@ end
 
 function _speaker.setOutput(string)
 	if not peripheral.wrap(string) then
-		speaker = speakers[1]
-		return false, peripheral.getName(speakers[1])
+		return false, ''
 	end
 	speaker = peripheral.wrap(string)
 	return true

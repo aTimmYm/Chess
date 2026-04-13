@@ -39,10 +39,6 @@ local blittle = require "blittle_extended"
 -- local system = require "braunnnsys"
 local c = require "cfunc"
 
-local function clip_calc(x1, y1, w1, h1, x2, y2, w2, h2)
-	return _max(x1, x2), _max(y1, y2), _min(w1, w2), _min(h1, h2)
-end
-
 local ScrollableMixin = {}
 
 function ScrollableMixin:initScroll(sensitivity_x, sensitivity_y)
@@ -196,37 +192,32 @@ end
 ---@param args Widget
 ---@return object
 function UI.Widget(args)
-	return {
-		x = args.x, y = args.y,
-		w = args.w, h = args.h,
-		dirty = true,
-		parent = nil,
-		bc = args.bc,
-		fc = args.fc,
-		bc_alt = args.bc_alt,
-		fc_alt = args.fc_alt,
-		fc_hv = args.fc_hv,
-		bc_hv = args.bc_hv,
-		fc_cl = args.fc_cl,
-		bc_cl = args.bc_cl,
+	local instance = {}
 
-		check = check,
-		onKeyDown = onKeyDown,
-		onKeyUp = onKeyUp,
-		onCharTyped = onCharTyped,
-		onPaste = onPaste,
-		onMouseDown = onMouseDown,
-		onMouseMove = onMouseMove,
-		onMouseUp = onMouseUp,
-		onMouseScroll = onMouseScroll,
-		onMouseDrag = onMouseDrag,
-		onFocus = onFocus,
-		focusPostDraw = focusPostDraw,
-		draw = draw,
-		redraw = redraw,
-		onLayout = onLayout,
-		onEvent = onEvent,
-	}
+	instance.parent = nil
+	instance.dirty = true
+	for k, v in pairs(args) do
+		instance[k] = v
+	end
+
+	instance.check = check
+	instance.onKeyDown = onKeyDown
+	instance.onKeyUp = onKeyUp
+	instance.onCharTyped = onCharTyped
+	instance.onPaste = onPaste
+	instance.onMouseDown = onMouseDown
+	instance.onMouseMove = onMouseMove
+	instance.onMouseUp = onMouseUp
+	instance.onMouseScroll = onMouseScroll
+	instance.onMouseDrag = onMouseDrag
+	instance.onFocus = onFocus
+	instance.focusPostDraw = focusPostDraw
+	instance.draw = draw
+	instance.redraw = redraw
+	instance.onLayout = onLayout
+	instance.onEvent = onEvent
+
+	return instance
 end
 
 local function Container_layoutChild(self)
@@ -282,7 +273,6 @@ local function Container_removeChild(self, child)
 			child.parent = nil
 			child.local_x, child.local_y = nil, nil
 			table.remove(self.children, i)
-			-- self:onLayout()
 			return true
 		end
 	end
@@ -300,8 +290,8 @@ local function Container_onEvent(self, evt)
 	local event = evt[1]
 	-- if self.modal and EVENTS.TOP[event] and (self.modal.root.keyboard:onEvent(evt) or self.modal:onEvent(evt)) then return true end
 	if self.custom_handlers[event] then
-        return self.custom_handlers[event](table.unpack(evt, 2))
-    end
+		return self.custom_handlers[event](table.unpack(evt, 2))
+	end
 	if EVENTS.TOP[event] then
 		for i = #self.children, 1, -1 do
 			local child = self.children[i]
@@ -541,6 +531,11 @@ function UI.ScrollBox(args)
 	return instance
 end
 
+local function setDisabled(self, bool)
+	self.disabled = bool
+	self.dirty = true
+end
+
 local function Tumbler_draw(self)
 	local frame = self.animation_frames[self.current_frame]
 	for i = 1, 2 do
@@ -585,6 +580,7 @@ local function Tumbler_updateAnimation(self)
 end
 
 local function Tumbler_onMouseDown(self, btn, x, y)
+	if self.disabled then return true end
 	if not self.animating then
 		self:startAnimation(self.on and "to_off" or "to_on")
 		self:pressed()
@@ -648,6 +644,7 @@ function UI.Tumbler(args)
 	instance.onMouseDown = Tumbler_onMouseDown
 	instance.onEvent = Tumbler_onEvent
 	instance.pressed = pressed
+	instance.setDisabled = setDisabled
 
 	return instance
 end
@@ -672,6 +669,7 @@ local function RadioButton_horizontal_changeCount(self, arg)
 end
 
 local function RadioButton_horizontal_onMouseUp(self, btn, x, y)
+	if self.disabled then return true end
 	if self:check(x,y) then
 		self.item = x - self.x + 1
 		self.dirty = true
@@ -701,6 +699,7 @@ function UI.RadioButton_horizontal(args)
 	instance.changeCount = RadioButton_horizontal_changeCount
 	instance.pressed = pressed
 	instance.onMouseUp = RadioButton_horizontal_onMouseUp
+	instance.setDisabled = setDisabled
 
 	return instance
 end
@@ -721,6 +720,7 @@ local function RadioButton_draw(self)
 end
 
 local function RadioButton_onMouseUp(self, btn, x, y)
+	if self.disabled then return true end
 	if self:check(x, y) then
 		self.item = y - self.y + 1
 		self.dirty = true
@@ -757,6 +757,7 @@ function UI.RadioButton(args)
 
 	instance.draw = RadioButton_draw
 	instance.onMouseUp = RadioButton_onMouseUp
+	instance.setDisabled = setDisabled
 
 	return instance
 end
@@ -1010,12 +1011,14 @@ local function Button_draw(self)
 end
 
 local function Button_onMouseDown(self, btn, x, y)
+	if self.disabled then return true end
 	self.held = true
 	self.dirty = true
 	return true
 end
 
 local function Button_onMouseUp(self, btn, x, y)
+	if self.disabled then return true end
 	if self:check(x,y) and self.held == true then self:pressed(btn, x, y) end
 	self.held = false
 	self.dirty = true
@@ -1023,15 +1026,16 @@ local function Button_onMouseUp(self, btn, x, y)
 end
 
 local function Button_onMouseMove(self, btn, x, y)
+	if self.disabled then return true end
 	if self:check(x, y) then
-		if self.hovered == false then
+		if not self.hovered then
 			self.hovered = true
 			self.dirty = true
 		end
 		return false
 	end
-	if self.hovered == true then
-		self.hovered = false
+	if self.hovered then
+		self.hovered = nil
 		self.dirty = true
 	end
 	return false
@@ -1060,7 +1064,7 @@ function UI.Button(args)
 
 	instance.text = args.text or ""
 	instance.held = false
-	instance.hovered = false
+	instance.hovered = nil
 	instance.align = args.align or "center"
 
 	instance.draw = Button_draw
@@ -1069,6 +1073,7 @@ function UI.Button(args)
 	instance.onMouseUp = Button_onMouseUp
 	instance.onMouseMove = Button_onMouseMove
 	instance.setText = Label_setText
+	instance.setDisabled = setDisabled
 
 	return instance
 end
@@ -2618,37 +2623,86 @@ function UI.Clock(args)
 	return instance
 end
 
+local function Timer_getRemainingMs(self)
+	if not self.running then
+		return self.time * 1000  -- замороженное время
+	end
+	return self.expiration - os.epoch("utc")
+end
+
 local function Timer_updateTime(self)
+	if not self.running then return end
+
 	-- local now = os.epoch("utc") / 1000
+	-- local delay
+	-- if self.show_seconds then
+		-- local frac = now - _floor(now)
+		-- delay = 1 - frac
+	-- else
+	-- 	local seconds_into_minute = now % 60
+	-- 	delay = 60 - seconds_into_minute
+	-- end
+	-- self.timer = os.startTimer(delay)
 
-	-- local frac = now - _floor(now)
-	-- local delay = 1 - frac
+	local remainingMs = self:getRemainingMs()
+	if remainingMs <= 0 then
+		self:pause()
+		self:pressed()
+		return
+	end
 
-	local delay = 1
+	-- Обновляем отображаемое время (целые секунды)
+	self.time = math.floor((remainingMs / 1000) + 0.5)
+	-- self.time = (remainingMs / 1000)
+	-- self.dirty = true
+
+	-- Вычисляем точную задержку до следующей смены секунды на экране
+	local remainingSec = remainingMs / 1000
+	local frac = remainingSec % 1
+	local delay = (frac == 0) and 1 or frac
 
 	self.timer = os.startTimer(delay)
-	self.time = self.time - 1
-	if self.time <=0 then log("Timer end") self:pause() end
-	self.dirty = true
 end
 
 local function Timer_pause(self)
+	if not self.running then return false end
+
 	os.cancelTimer(self.timer)
 	self.timer = nil
+	self.running = false
+
+	-- Замораживаем ТОЧНОЕ оставшееся время (в секундах)
+	local remainingMs = self:getRemainingMs()
+	self.time = math.max(0, math.floor(remainingMs / 1000))
+
 	return true
 end
 
-local function Timer_unpause(self)
-	return self:updateTime()
+local function Timer_unPause(self)
+	if self.running then return false end
+
+	self.running = true
+	local now = os.epoch("utc")
+	self.expiration = now + self.time * 1000
+
+	return self:updateTime()  -- сразу запустит таймер
 end
 
 local function Timer_setTime(self, sec)
-	if type(sec) == 'number' then
-		self.time = sec
+	if type(sec) ~= "number" then return false end
+
+	self.time = math.max(0, math.floor(sec))
+
+	if self.running then
+		-- Если таймер уже запущен — перезапускаем с новым временем
+		local now = os.epoch("utc")
+		self.expiration = now + self.time * 1000
 		self:updateTime()
-		return true
 	end
-	return false
+	-- Если на паузе — просто меняем замороженное значение
+
+	self.dirty = true
+	return true
 end
 
 local function Timer_addTime(self, sec)
@@ -2656,27 +2710,32 @@ local function Timer_addTime(self, sec)
 end
 
 local function Timer_draw(self)
-	term.setBackgroundColor(self.bc)
 	term.setCursorPos(self.x, self.y)
+	term.setBackgroundColor(self.bc)
 	term.setTextColor(self.fc)
-	local time = self.time
-	local text = tostring(time)
-	text = text:sub(_max(1, #text - self.w), -1)
-	term.write(text)
+	local time = self.time and os.date("!%X", self.time) or '--:--:--'
+	term.write(time)
 end
 
 function UI.Timer(args)
+	args.w = 8
+	args.h = 1
 	local instance = UI.Widget(args)
 
-	instance.deltaTime = args.deltaTime or 0
-	instance.time = args.time or 0
-	instance.format = "%H:%M:%S"
+	instance.time = args.time
+	instance.running = false          -- по умолчанию на паузе
+	instance.expiration = 0
 
 	instance.draw = Timer_draw
 	instance.updateTime = Timer_updateTime
-	instance.onEvent = Clock_onEvent
+	instance.onEvent = Clock_onEvent   -- или твой обработчик
 	instance.pause = Timer_pause
-	instance.unpause = Timer_unpause
+	instance.setTime = Timer_setTime
+	instance.addTime = Timer_addTime
+	instance.unPause = Timer_unPause
+
+	-- Вспомогательный метод (для внутреннего использования)
+	instance.getRemainingMs = Timer_getRemainingMs
 
 	return instance
 end
@@ -2741,9 +2800,6 @@ function UI.LoadingBar(args)
 	local instance = UI.Widget(args)
 
 	instance.orientation = orientation or "center"
-	instance.bc = args.bc
-	instance.color_Loading = args.color_Loading
-	instance.color_NotLoaded = args.color_NotLoaded
 	instance.value = args.value or 0
 
 	instance.draw = LoadingBar_draw
@@ -2753,70 +2809,59 @@ function UI.LoadingBar(args)
 end
 
 local function Dropdown_draw(self)
-	local index_arr = self.array[self.item_index]
-	if self.orientation == "left" then
-		term.setBackgroundColor(self.bc)
-		term.setTextColor(self.fc)
-		term.setCursorPos(self.x, self.y)
-		term.write(_sub((index_arr), 1, self.w - 1).._rep(" ", self.w - 1 - #index_arr).."\18")
-		if self.expanded then
-			for i, v in pairs(self.array) do
-				term.setBackgroundColor(self.bc)
-				term.setTextColor(self.fc)
-				term.setCursorPos(self.x, self.y + i)
-				term.write(_sub((v.._rep(" ", self.w - #v)), 1, self.w))
-			end
-			term.setBackgroundColor(self.bc)
-			term.setTextColor(self.fc)
-			term.setCursorPos(self.x, self.y)
-			term.write(_sub((index_arr), 1, self.w - 1).._rep(" ", self.w - 1 - #index_arr).."\18")
-			self.h = #self.array + 1
-		else
-			self.h = 1
-		end
-	elseif self.orientation == "right" then
-		term.setBackgroundColor(self.bc)
-		term.setTextColor(self.fc)
-		term.setCursorPos(self.x, self.y)
-		term.write(_sub(index_arr.._rep(" ", self.w - 1 - #index_arr).."\18", 1, self.w))
-		if self.expanded then
-			for i, v in pairs(self.array) do
-				term.setBackgroundColor(self.bc)
-				term.setTextColor(self.fc)
-				term.setCursorPos(self.x, self.y + i)
-				term.write(_sub(_rep(" ", self.w - #v)..v, 1, self.w))
-			end
-			term.setBackgroundColor(self.bc)
-			term.setTextColor(self.fc)
-			term.setCursorPos(self.x, self.y)
-			term.write(_sub(index_arr, 1, self.w - 1).._rep(" ", self.w - 1 - #index_arr).."\18")
-			self.h = #self.array + 1
-		else
-			self.h = 1
-		end
+	local element = self.array[self.item_index]
+	term.setBackgroundColor(self.bc)
+	term.setTextColor(self.fc)
+	term.setCursorPos(self.x, self.y)
+	if element then
+		term.write(element:sub(1, self.w - 1) .. (' '):rep(self.w - 1 - #element) .. "\18")
 	else
-		error("Bad argument init.dropdown(#6): " .. tostring(self.orientation))
+		term.write((' '):rep(self.w-1).. "\18")
 	end
 end
 
-local function Dropdown_onFocus(self,focused)
-	if not focused and self.expanded then
-		self.expanded = false
-		self.parent:onLayout()
-		self.dirty = true
+local function context_onFocus(self, focused)
+	if not focused then
+		self.root:removeChild(self)
+		self.root:onLayout()
 	end
+
 	return true
 end
 
-local function Dropdown_onMouseDown(self, btn, x, y)
-	if (y - self.y) > 0 then self.item_index = _min(_max(y - self.y, 1), #self.array) end
-	self.expanded = not self.expanded
-	if self.expanded == false then
-		self.parent:onLayout()
-		self:pressed(self.array[self.item_index])
-	else
-		self.dirty = true
+local function contextMouseDown(self, btn, x, y)
+	local dropdown = self.dropdown
+	dropdown.item_index = y - self.y + 1
+	dropdown:pressed(dropdown.array[dropdown.item_index])
+	self.root:removeChild(self)
+	self.root:onLayout()
+
+	return true
+end
+
+local function contextDraw(self) -- ВРЕМЕННОЕ НАДО МЕНЯТЬ
+	local dropdown = self.dropdown
+
+	paintutils.drawFilledBox(self.x, self.y, self.w + self.x - 1, self.h + self.y - 1, self.bc)
+
+	for i, v in pairs(dropdown.array) do
+		term.setCursorPos(self.x, self.y + i - 1)
+		term.setBackgroundColor(self.bc)
+		term.setTextColor(self.fc)
+		term.write(v..(''):rep(self.w - #v))
 	end
+end
+
+local function Dropdown_onMouseDown(self, btn, x, y)
+	if self.disabled then return true end
+	local box = UI.Box{ x = self.x, y = _min(self.root.h - #self.array, _max(1, self.y - (self.item_index - 1))), w = self.w, h = #self.array, bc = self.bc, fc = self.fc}
+	box.dropdown = self
+	self.root:addChild(box)
+	self.root.focus = box
+	box.draw = contextDraw
+	box.onMouseDown = contextMouseDown
+	box.onFocus = context_onFocus
+
 	return true
 end
 
@@ -2849,13 +2894,12 @@ function UI.Dropdown(args)
 	end
 	instance.orientation = orientation or "left"
 	if type(maxSizeW) ~= "number" then maxSizeW = nil end
-	instance.w = args.maxSizeW or c.findMaxLenStrOfArray(instance.array) + 1
-	instance.expanded = false
+	instance.w = args.maxSizeW or _max(5, c.findMaxLenStrOfArray(instance.array) + 1)
 
 	instance.draw = Dropdown_draw
-	instance.onFocus = Dropdown_onFocus
 	instance.pressed = pressed
 	instance.onMouseDown = Dropdown_onMouseDown
+	instance.setDisabled = setDisabled
 
 	return instance
 end
@@ -3613,7 +3657,6 @@ local function TableView_draw(self)
 		-- line = string.sub(line..v.title..string.rep(" ", v.w-#v.title), 1, v.w - 1) .. "|"
 		line = line .. v.title:sub(1, v.w) .. string.rep(" ", v.w - #v.title).."|"
 		v.x = self.x + #line - 1
-		-- log(v.x)
 	end
 	term.write(line)
 	-- local line = "Name"

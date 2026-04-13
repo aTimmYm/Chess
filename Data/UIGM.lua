@@ -35,15 +35,9 @@ local EVENTS = {
 }
 
 local expect = require "cc.expect".expect
--- local blittle = require "blittle_extended"
 local font = require "Font"
-local f = font.new()
--- local system = require "braunnnsys"
+local g = require "geometry"
 local c = require "cfunc"
-
-local function clip_calc(x1, y1, w1, h1, x2, y2, w2, h2)
-	return _max(x1, x2), _max(y1, y2), _min(w1, w2), _min(h1, h2)
-end
 
 local ScrollableMixin = {}
 
@@ -134,197 +128,6 @@ local function add_mixin(object, mixin)
 	end
 end
 
-local function Formula(n)
-	-- x^2 + y^2 = R (R = 1)
-	-- n^2 + a^2 = R -> n = sqrt(R - a^2)
-	if math.abs(n) <= 1 then
-		return math.sqrt(1 - n*n)
-	end
-end
-
-local function draw_curved_corners(x, y, w, h, r, bc)
-	local R = r
-	R = math.floor(math.min(math.floor(h / 2) - 1, math.floor(h / 2) - 1, R) + 0.5)
-	R = math.max(1, R)
-
-	local topLeft = {
-		x = x + R,
-		y = y + R
-	}
-	local botLeft = {
-		x = x + R,
-		y = y + h - R - 1
-	}
-	local topRight = {
-		x = x + w - R - 1,
-		y = y + R
-	}
-	local botRight = {
-		x = x + w - R - 1,
-		y = y + h - R - 1
-	}
-
-	--top left
-	-- x^2 + y^2 = 1
-	-- n^2 + a^2 = 1 -> n = sqrt(1 - a^2)
-	local sin45 = 0.70710678118655 -- ~ 1 / 1.4142135623731 ~ 1 / sqrt(2)
-	local centcord = math.floor(R * sin45 + 0.5)
-	for x = 0, centcord do
-		local constX = math.floor(x)
-		local constY = math.floor((Formula(x/R)*R))
-
-		term.setPixel(topLeft.x - constX, topLeft.y - constY, bc)
-		term.setPixel(topLeft.x - constY, topLeft.y - constX, bc)
-
-		term.setPixel(topRight.x + constX, topRight.y - constY, bc)
-		term.setPixel(topRight.x + constY, topRight.y - constX, bc)
-
-		term.setPixel(botLeft.x - constX, botLeft.y + constY, bc)
-		term.setPixel(botLeft.x - constY, botLeft.y + constX, bc)
-
-		term.setPixel(botRight.x + constX, botRight.y + constY, bc)
-		term.setPixel(botRight.x + constY, botRight.y + constX, bc)
-
-		paintutils.drawLine(topLeft.x - constX + 1, topLeft.y - constY + 1, topRight.x + constX + 1, topRight.y - constY + 1, bc)
-		paintutils.drawLine(topLeft.x - constY + 1, topLeft.y - constX + 1, topRight.x + constY + 1, topRight.y - constX + 1, bc)
-		paintutils.drawLine(botLeft.x - constX + 1, botLeft.y + constY + 1, botRight.x + constX + 1, botRight.y + constY + 1, bc)
-		paintutils.drawLine(botLeft.x - constY + 1, botLeft.y + constX + 1, botRight.x + constY + 1, botRight.y + constX + 1, bc)
-	end
-	term.drawPixels(x, y + R, bc, w, h - R * 2)
-end
-
-local function draw_circle(x, y, bg, Radius)
-	local cx = Radius
-	local cy = 0
-	local err = 0
-
-	while cx >= cy do
-		term.setPixel(x + cx, y + cy, bg)
-		term.setPixel(x + cy, y + cx, bg)
-		term.setPixel(x - cy, y + cx, bg)
-		term.setPixel(x - cx, y + cy, bg)
-		term.setPixel(x - cx, y - cy, bg)
-		term.setPixel(x - cy, y - cx, bg)
-		term.setPixel(x + cy, y - cx, bg)
-		term.setPixel(x + cx, y - cy, bg)
-
-		if err <= 0 then
-			cy = cy + 1
-			err = err + 2 * cy + 1
-		end
-		if err > 0 then
-			cx = cx - 1
-			err = err - 2 * cx + 1
-		end
-	end
-end
-
--- local function draw_brezen(cX, cY, bg, R)
--- 	local x = 0
--- 	local y = R
--- 	local delta = 1 - 2*R
--- 	local err = 0
--- 	while y >= x do
--- 		term.setPixel(cX + x, cY + y, bg)
--- 		term.setPixel(cX + x, cY - y, bg)
--- 		term.setPixel(cX - x, cY + y, bg)
--- 		term.setPixel(cX - x, cY - y, bg)
--- 		term.setPixel(cX + y, cY + x, bg)
--- 		term.setPixel(cX + y, cY - x, bg)
--- 		term.setPixel(cX - y, cY + x, bg)
--- 		term.setPixel(cX - y, cY - x, bg)
--- 		err = 2 * (delta + y) - 1
--- 		if delta < 0 and err <= 0 then
--- 			x = x + 1
--- 			delta = delta + 2 * x + 1
--- 		elseif delta > 0 and err > 0 then
--- 			y = y - 1
--- 			delta = delta - 2 * y + 1
--- 		else
--- 			x = x+1
--- 			y = y-1
--- 			delta = delta + 2 * (x - y)
--- 		end
--- 	end
--- end
-
-local function draw_brezen(cX, cY, bg, R)
-    -- Поддержка дробного радиуса (сайт тоже так делает)
-    R = R + 0.5   -- маленький сдвиг даёт лучшее округление, как на сайте
-
-    -- 1. Идём по X и считаем Y (горизонтальные пары)
-    for x = -R, R do
-        local yy = math.sqrt(R * R - x * x)
-        local y = math.floor(yy + 0.5)   -- округление как на сайте
-
-        term.setPixel(cX + x, cY + y, bg)
-        term.setPixel(cX + x, cY - y, bg)
-    end
-
-    -- 2. Идём по Y и считаем X (вертикальные пары) — убирает пропуски
-    for y = -R, R do
-        local xx = math.sqrt(R * R - y * y)
-        local x = math.floor(xx + 0.5)
-
-        term.setPixel(cX + x, cY + y, bg)
-        term.setPixel(cX - x, cY + y, bg)
-    end
-end
-
--- local function draw_brezen(cX, cY, bg, R)
---     R = math.floor(R + 0.5)
-
---     if R < 0 then return end
-
---     local x = 0
---     local y = R
---     local delta = 3 - 2 * R
-
---     while x <= y do
---         term.setPixel(cX + x, cY + y, bg)
---         term.setPixel(cX + x, cY - y, bg)
---         term.setPixel(cX - x, cY + y, bg)
---         term.setPixel(cX - x, cY - y, bg)
---         term.setPixel(cX + y, cY + x, bg)
---         term.setPixel(cX + y, cY - x, bg)
---         term.setPixel(cX - y, cY + x, bg)
---         term.setPixel(cX - y, cY - x, bg)
-
---         if delta < 0 then
---             delta = delta + 4 * x + 6
---             x = x + 1
---         else
---             delta = delta + 4 * (x - y) + 10
---             x = x + 1
---             y = y - 1
---         end
---     end
--- end
-
-local function draw_filled_circle(cx, cy, bg, radius)
-	-- 1. Визначаємо межі квадрата (bounding box), в який вписане коло
-	local min_x = math.floor(cx - radius)
-	local max_x = math.ceil(cx + radius)
-	local min_y = math.floor(cy - radius)
-	local max_y = math.ceil(cy + radius)
-	
-	local r_sq = radius * radius
-
-	-- 2. Проходимось по всіх пікселях усередині цього квадрата
-	for py = min_y, max_y do
-		for px = min_x, max_x do
-			-- 3. Рахуємо відстань від поточного пікселя до ТОЧНОГО (дробового) центру
-			local dx = px - cx
-			local dy = py - cy
-			
-			-- Якщо піксель лежить у межах радіуса кола — зафарбовуємо
-			if (dx * dx + dy * dy) <= r_sq then
-				term.setPixel(px, py, bg)
-			end
-		end
-	end
-end
-
 local function check(self,x,y)
 	return (x >= self.x and x < self.w + self.x and
 			y >= self.y and y < self.h + self.y)
@@ -389,42 +192,37 @@ end
 ---@param args Widget
 ---@return object
 function UI.Widget(args)
-	return {
-		x = args.x, y = args.y,
-		w = args.w, h = args.h,
-		dirty = true,
-		parent = nil,
-		bc = args.bc,
-		fc = args.fc,
-		bc_alt = args.bc_alt,
-		fc_alt = args.fc_alt,
-		fc_hv = args.fc_hv,
-		bc_hv = args.bc_hv,
-		fc_cl = args.fc_cl,
-		bc_cl = args.bc_cl,
+	local instance = {}
 
-		check = check,
-		onKeyDown = onKeyDown,
-		onKeyUp = onKeyUp,
-		onCharTyped = onCharTyped,
-		onPaste = onPaste,
-		onMouseDown = onMouseDown,
-		onMouseMove = onMouseMove,
-		onMouseUp = onMouseUp,
-		onMouseScroll = onMouseScroll,
-		onMouseDrag = onMouseDrag,
-		onFocus = onFocus,
-		focusPostDraw = focusPostDraw,
-		draw = draw,
-		redraw = redraw,
-		onLayout = onLayout,
-		onEvent = onEvent,
-	}
+	instance.parent = nil
+	instance.dirty = true
+	for k, v in pairs(args) do
+		instance[k] = v
+	end
+
+	instance.check = check
+	instance.onKeyDown = onKeyDown
+	instance.onKeyUp = onKeyUp
+	instance.onCharTyped = onCharTyped
+	instance.onPaste = onPaste
+	instance.onMouseDown = onMouseDown
+	instance.onMouseMove = onMouseMove
+	instance.onMouseUp = onMouseUp
+	instance.onMouseScroll = onMouseScroll
+	instance.onMouseDrag = onMouseDrag
+	instance.onFocus = onFocus
+	instance.focusPostDraw = focusPostDraw
+	instance.draw = draw
+	instance.redraw = redraw
+	instance.onLayout = onLayout
+	instance.onEvent = onEvent
+
+	return instance
 end
 
 local function Container_layoutChild(self)
 	for _, child in ipairs(self.children) do
-		child.x, child.y = self.x + child.local_x - 1, self.y + child.local_y - 1
+		child.x, child.y = self.x + child.local_x, self.y + child.local_y
 	end
 end
 
@@ -475,7 +273,6 @@ local function Container_removeChild(self, child)
 			child.parent = nil
 			child.local_x, child.local_y = nil, nil
 			table.remove(self.children, i)
-			-- self:onLayout()
 			return true
 		end
 	end
@@ -589,7 +386,7 @@ local function Root_onEvent(self, evt)
 end
 
 local function Root_mainloop(self)
-	Root_show(self)
+	self:show()
 	while true do
 		local evt = {coroutine.yield()}
 		if evt[1] == "terminate" then
@@ -599,7 +396,9 @@ local function Root_mainloop(self)
 			term.clear()
 			break
 		end
+		-- term.setFrozen(true)
 		self:onEvent(evt)
+		-- term.setFrozen(false)
 	end
 	term.setBackgroundColor(colors.black)
 	term.setTextColor(colors.white)
@@ -612,7 +411,7 @@ end
 ---@return table object root
 function UI.Root()
 	local w, h = term.getSize(1)
-	local instance = UI.Container({x = 1, y = 1, w = w, h = h})
+	local instance = UI.Container({x = 0, y = 0, w = w, h = h})
 
 	instance.focus = nil
 
@@ -620,6 +419,7 @@ function UI.Root()
 	instance.redraw = Root_redraw
 	instance.onEvent = Root_onEvent
 	instance.mainloop = Root_mainloop
+	instance.show = Root_show
 
 	return instance
 end
@@ -630,7 +430,11 @@ local function Box_onLayout(self)
 end
 
 local function Box_draw(self)
-	term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
+	if self.radius then
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
+	else
+		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
+	end
 end
 
 ---@class Box
@@ -652,27 +456,84 @@ function UI.Box(args)
 end
 
 local function ScrollBox_draw(self)
-	paintutils.drawFilledBox(1, 1, self.w, self.h, self.bc)
-	self.win.reposition(self.x, self.y, self.w, self.h)
+	if self.radius then
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius)
+	else
+		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
+	end
+end
+
+
+local original_setPixel = term.setPixel
+
+local function term_setPixel(x, y, col)
+	if x >= term.clip_x and
+	x < term.clip_x + term.clip_w and
+	y >= term.clip_y and
+	y < term.clip_y + term.clip_h
+	then return original_setPixel(x, y, col) end
+end
+
+local original_drawPixels = term.drawPixels
+
+local function term_drawPixels(x, y, col, w, h)
+	local x1 = math.max(x, term.clip_x)
+	local y1 = math.max(y, term.clip_y)
+	local x2 = math.min(x + w, term.clip_w + term.clip_x)
+	local y2 = math.min(y + h, term.clip_h + term.clip_y)
+	if x2 < x1 or y2 < y1 then return end
+	return original_drawPixels(x1, y1, col, x2 - x1, y2 - y1)
+end
+
+function UI.term_setClip(x, y, w, h)
+	local old = {
+		x = term.clip_x,
+		y = term.clip_y,
+		w = term.clip_w,
+		h = term.clip_h
+	}
+	if old.x then
+		local nx1 = math.max(x, old.x)
+		local ny1 = math.max(y, old.y)
+		local nx2 = math.min(x + w - 1, old.x + old.w - 1)
+		local ny2 = math.min(y + h - 1, old.y + old.h - 1)
+
+		if nx2 < nx1 or ny2 < ny1 then
+			term.clip_x, term.clip_y, term.clip_w, term.clip_h = 0, 0, 0, 0
+		else
+			term.clip_x = nx1
+			term.clip_y = ny1
+			term.clip_w = nx2 - nx1 + 1
+			term.clip_h = ny2 - ny1 + 1
+		end
+	else
+		term.clip_x, term.clip_y, term.clip_w, term.clip_h = x, y, w, h
+	end
+	term.drawPixels = term_drawPixels
+	term.setPixel = term_setPixel
+	return old
+end
+
+function UI.term_unsetClip(old)
+	term.clip_x = old.x
+	term.clip_y = old.y
+	term.clip_w = old.w
+	term.clip_h = old.h
+	if not old.x then
+		term.drawPixels = original_drawPixels
+		term.setPixel = original_setPixel
+	end
 end
 
 local function ScrollBox_redraw(self)
-	-- local OldCurPos = {term.getCursorPos()}
-	local old_term = term.redirect(self.win)
-	-- term.setTextColor(self.term.getTextColor())
-	-- term.setBackgroundColor(self.term.getBackgroundColor())
-	-- term.setCursorBlink(self.term.getCursorBlink())
 	if self.dirty then self:draw(); self.dirty = false end
+	local old = UI.term_setClip(self.x, self.y, self.w, self.h)
+
 	for _,child in pairs(self.visibleChild) do
-		local tempX, tempY = child.x, child.y
-		child.x = child.local_x - self.scroll.pos_x
-		child.y = child.local_y - self.scroll.pos_y
 		child:redraw()
-		child.x = tempX
-		child.y = tempY
 	end
-	term.redirect(old_term)
-	-- term.setCursorPos(OldCurPos[1], OldCurPos[2])
+
+	UI.term_unsetClip(old)
 end
 
 local function ScrollBox_onLayout(self)
@@ -684,11 +545,11 @@ local function ScrollBox_onLayout(self)
 		child.x = child.x - self.scroll.pos_x
 		self.scroll.max_y = _max(_max(self.scroll.max_y, child.local_y + child.h) - self.h, 0)
 		self.scroll.max_x = _max(_max(self.scroll.max_x, child.local_x + child.w) - self.w, 0)
-		if child.y + child.h > self.y and child.y <= self.y + self.h - 1 then
+		if child.y + child.h >= self.y and child.y <= self.y + self.h then
 			table_insert(self.visibleChild, child)
 		end
+		child:onLayout()
 	end
-	self.win.reposition(self.x, self.y)
 end
 
 local function ScrollBox_onMouseScroll(self, dir, x, y)
@@ -714,14 +575,17 @@ end
 ---@field h number Height in characters
 ---@field bc color|number Background color
 ---@field fc? color|number Foreground/text color (optional)
+---@field sensitivity_x? number
+---@field sensitivity_y? number
 ---@param args ScrollBox Initialization table with fields above
 ---@return table object ScrollBox
 function UI.ScrollBox(args)
 	local instance = UI.Container(args)
 
-	instance.win = window.create(term.current(), args.x, args.y, args.w, args.h, true)
+
+
 	add_mixin(instance, ScrollableMixin)
-	instance:initScroll(3, 3)
+	instance:initScroll(args.sensitivity_x or 10, args.sensitivity_y or 10)
 	instance.visibleChild = {}
 
 	instance.draw = ScrollBox_draw
@@ -733,25 +597,28 @@ function UI.ScrollBox(args)
 	return instance
 end
 
+local function setDisabled(self, bool)
+	self.disabled = bool
+	self.dirty = true
+end
+
 local function Tumbler_draw(self)
-	-- local frame = self.animation_frames[self.current_frame]
-	-- for i = 1, 2 do
-	-- 	local p = frame[i]
-	-- 	term.setBackgroundColor(p.bgcol)
-	-- 	term.setTextColor(p.txtcol)
-	-- 	term.setCursorPos(self.x + i - 1, self.y)
-	-- 	term.write(p.char)
-	-- end
-	-- term.drawPixels(self.x, self.y, colors.green, self.w, self.h)
-	-- draw_curved_corners(self.x, self.y, self.w, self.h, self.radius, self.bc)
-	-- draw_curved_corners(20, 20, 15, 15, 7, self.fc)
-	local r = math.min(self.h - 1, self.w)/2
-	-- local d = math.floor(r/2)
-	local y = r + self.y
-	local x = r + self.x
-	-- draw_filled_circle(x + self.w - r*2, y, self.fc, r * 0.75)
-	-- draw_filled_circle(self.x+10, self.y+10, self.fc, 4)
-	draw_brezen(self.x + 10, self.y + 10, self.bc, 5)
+	if self.on then
+		-- draw_circle_web(self.x, self.y, self.h, self.bc)
+		-- draw_circle_web(self.x + self.h, self.y, self.h, self.bc)
+		-- term.drawPixels(self.x + self.h/2, self.y, self.bc, self.w - self.h/2 - self.h/2, self.h)
+		-- local d = math.floor(self.h*0.75)
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
+		g.draw_circle(self.x, self.y, d, colors.white)
+	else
+		-- draw_circle_web(self.x, self.y, self.h, colors.lightGray)
+		-- draw_circle_web(self.x + self.h, self.y, self.h, colors.lightGray)
+		-- term.drawPixels(self.x + self.h/2, self.y, colors.lightGray, self.w - self.h/2 - self.h/2, self.h)
+		-- local d = math.floor(self.h*0.75)
+		-- draw_circle_web(self.x + 2, math.floor(self.y*1.25) - 1, d, colors.white)
+
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc_alt)
+	end
 end
 
 local function Tumbler_startAnimation(self,direction)
@@ -787,7 +654,10 @@ local function Tumbler_updateAnimation(self)
 end
 
 local function Tumbler_onMouseDown(self, btn, x, y)
+	if self.disabled then return true end
 	if not self.animating then
+		self.on = not self.on
+		self.dirty = true
 		-- self:startAnimation(self.on and "to_off" or "to_on")
 		self:pressed()
 	end
@@ -833,6 +703,7 @@ function UI.Tumbler(args)
 	instance.onMouseDown = Tumbler_onMouseDown
 	instance.onEvent = Tumbler_onEvent
 	instance.pressed = pressed
+	instance.setDisabled = setDisabled
 
 	return instance
 end
@@ -840,13 +711,13 @@ end
 local function RadioButton_horizontal_draw(self)
 	term.setBackgroundColor(self.bc)
 	for i = 1, self.count do
-		term.setCursorPos(self.x + i - 1, self.y)
+		local fc = colors.gray
+		-- term.setCursorPos(self.x + i - 1, self.y)
 		if self.item == i then
-			term.setTextColor(self.fc)
-		else
-			term.setTextColor(colors.gray)
+			local fc = self.fc
 		end
-		term.write("\7")
+		-- term.write("\7")
+		font.simpleText('•', x,y,fc)
 	end
 end
 
@@ -857,6 +728,7 @@ local function RadioButton_horizontal_changeCount(self, arg)
 end
 
 local function RadioButton_horizontal_onMouseUp(self, btn, x, y)
+	if self.disabled then return true end
 	if self:check(x,y) then
 		self.item = x - self.x + 1
 		self.dirty = true
@@ -875,39 +747,42 @@ end
 ---@param args RadioButtonHorizontal Initialization table with fields above
 ---@return table object radioButton_horizontal
 function UI.RadioButton_horizontal(args)
-	args.w = 1; args.h = 1;
 	local instance = UI.Widget(args)
 
 	instance.count = (args.count and args.count >= 1) and args.count or 1
-	instance.w = instance.count
+	-- instance.w = instance.count
 	instance.item = 1
 
 	instance.draw = RadioButton_horizontal_draw
 	instance.changeCount = RadioButton_horizontal_changeCount
 	instance.pressed = pressed
 	instance.onMouseUp = RadioButton_horizontal_onMouseUp
+	instance.setDisabled = setDisabled
 
 	return instance
 end
 
 local function RadioButton_draw(self)
-	term.setBackgroundColor(self.bc)
+	term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
 	for i, v in ipairs(self.text) do
+		local fc = colors.gray
 		term.setCursorPos(self.x, self.y + i - 1)
-		term.setTextColor(colors.gray)
 		if self.item == i then
+			fc = self.fc
 			term.setTextColor(self.fc)
 		end
-		term.write("\7")
-		term.setCursorPos(self.x + 1, self.y + i - 1)
-		term.setTextColor(self.fc)
-		term.write(_rep(" ", _min(#v, 1))..v)
+		i = i - 1
+		font.simpleText('•', self.x, self.y + (i * 10), fc)
+		font.simpleText(v, self.x+5, self.y + (i * 10), self.fc)
 	end
 end
 
 local function RadioButton_onMouseUp(self, btn, x, y)
+	if self.disabled then return true end
+	local i = y - self.y + 1
+	i = math.floor(i / 10) + 1
 	if self:check(x, y) then
-		self.item = y - self.y + 1
+		self.item = i
 		self.dirty = true
 		self:pressed(self.text[self.item])
 	end
@@ -937,220 +812,33 @@ function UI.RadioButton(args)
 		end
 	end
 	local t = c.findMaxLenStrOfArray(instance.text)
-	instance.w = t == 0 and 1 or t + 2
-	instance.h = instance.count
+	-- instance.w = t == 0 and 1 or t + 2
+	-- instance.h = instance.count
 
 	instance.draw = RadioButton_draw
 	instance.onMouseUp = RadioButton_onMouseUp
+	instance.setDisabled = setDisabled
 
 	return instance
 end
 
--- local function Label_draw(self, bg_override, txtcol_override)
--- 	bg_override = bg_override or self.bc
--- 	txtcol_override = txtcol_override or self.fc
--- 	local lines = {}
--- 	if #self.text <= self.w then
--- 		table_insert(lines, self.text)
--- 	else
--- 		local mass = {}
--- 		for w in string_gmatch(self.text, "%S+") do
--- 			table_insert(mass, w)
--- 		end
--- 		local row_txt = ""
--- 		local i = 1
--- 		while i <= #mass do
--- 			local word = mass[i]
--- 			if #word > self.w then
--- 				local remainder = _sub(word, self.w + 1)
--- 				if remainder ~= "" then
--- 					table_insert(mass, i + 1, remainder)
--- 				end
--- 				mass[i] = _sub(word, 1, self.w)
--- 				word = mass[i]
--- 			end
--- 			local space_len = (row_txt == "" and 0 or 1)
--- 			if #row_txt + space_len + #word <= self.w then
--- 				row_txt = row_txt .. (row_txt == "" and "" or " ") .. word
--- 				i = i + 1
--- 			else
--- 				if row_txt ~= "" then
--- 					table_insert(lines, row_txt)
--- 					row_txt = ""
--- 				end
--- 			end
--- 			if #lines >= self.h then break end
--- 		end
--- 		if row_txt ~= "" and #lines < self.h then
--- 			table_insert(lines, row_txt)
--- 		end
--- 	end
-
--- 	local horiz_align = "center"
--- 	if string_find(self.align, "left") then
--- 		horiz_align = "left"
--- 	elseif string_find(self.align, "right") then
--- 		horiz_align = "right"
--- 	end
-
--- 	local num_lines = #lines
--- 	local vert_align = "center"
--- 	if string_find(self.align, "top") then
--- 		vert_align = "top"
--- 	elseif string_find(self.align, "bottom") then
--- 		vert_align = "bottom"
--- 	end
-
--- 	local start_y = self.y
--- 	if vert_align == "top" then
--- 		start_y = self.y
--- 	elseif vert_align == "bottom" then
--- 		start_y = self.y + self.h - num_lines
--- 	else  -- center
--- 		start_y = self.y + _floor((self.h - num_lines) / 2)
--- 	end
--- 	start_y = _max(start_y, self.y)
-
--- 	for i = self.y, start_y - 1 do
--- 		term.setBackgroundColor(bg_override); term.setCursorPos(self.x, i); term.setTextColor(txtcol_override); term.write(_rep(" ", self.w))
--- 	end
-
--- 	for j = 1, num_lines do
--- 		local line = lines[j]
--- 		local line_len = #line
--- 		local x_pos = self.x
--- 		if horiz_align == "left" then
--- 			x_pos = self.x
--- 		elseif horiz_align == "right" then
--- 			x_pos = self.x + self.w - line_len
--- 		else  -- center
--- 			x_pos = self.x + _floor((self.w - line_len) / 2)
--- 		end
--- 		local left_pad = _rep(" ", x_pos - self.x)
--- 		local right_pad = _rep(" ", self.w - (x_pos - self.x + line_len))
--- 		local full_line = left_pad .. line .. right_pad
--- 		term.setBackgroundColor(bg_override); term.setCursorPos(self.x, start_y + j - 1); term.setTextColor(txtcol_override); term.write(full_line)
--- 	end
-
--- 	local end_y = start_y + num_lines - 1
--- 	for i = end_y + 1, self.y + self.h - 1 do
--- 		term.setBackgroundColor(bg_override); term.setCursorPos(self.x, i); term.setTextColor(txtcol_override); term.write(_rep(" ", self.w))
--- 	end
--- end
-
 local function Label_draw(self, bg_override, txtcol_override)
-	f:draw(self.text, self.x, self.y, self.fc)
-	-- bg_override = bg_override or self.bc
-	-- txtcol_override = txtcol_override or self.fc
-	-- local lines = {}
-
-	-- -- Split text into paragraphs based on explicit newlines
-	-- local paragraphs = {}
-	-- local start = 1
-	-- local pos = string.find(self.text, "\n", start, true)
-	-- while pos do
-	-- 	table.insert(paragraphs, string.sub(self.text, start, pos - 1))
-	-- 	start = pos + 1
-	-- 	pos = string.find(self.text, "\n", start, true)
-	-- end
-	-- table.insert(paragraphs, string.sub(self.text, start))
-
-	-- for _, para in ipairs(paragraphs) do
-	-- 	if #lines >= self.h then break end
-	-- 	local mass = {}
-	-- 	for w in string.gmatch(para, "%S+") do
-	-- 		table.insert(mass, w)
-	-- 	end
-	-- 	if #mass == 0 then
-	-- 		-- Empty paragraph (or only whitespace), add a blank line
-	-- 		if #lines < self.h then
-	-- 			table.insert(lines, "")
-	-- 		end
-	-- 	else
-	-- 		local row_txt = ""
-	-- 		local i = 1
-	-- 		while i <= #mass do
-	-- 			if #lines >= self.h then break end
-	-- 			local word = mass[i]
-	-- 			if #word > self.w then
-	-- 				local remainder = _sub(word, self.w + 1)
-	-- 				if remainder ~= "" then
-	-- 					table.insert(mass, i + 1, remainder)
-	-- 				end
-	-- 				mass[i] = _sub(word, 1, self.w)
-	-- 				word = mass[i]
-	-- 			end
-	-- 			local space_len = (row_txt == "" and 0 or 1)
-	-- 			if #row_txt + space_len + #word <= self.w then
-	-- 				row_txt = row_txt .. (row_txt == "" and "" or " ") .. word
-	-- 				i = i + 1
-	-- 			else
-	-- 				if row_txt ~= "" then
-	-- 					table.insert(lines, row_txt)
-	-- 					row_txt = ""
-	-- 				end
-	-- 			end
-	-- 		end
-	-- 		if row_txt ~= "" and #lines < self.h then
-	-- 			table.insert(lines, row_txt)
-	-- 		end
-	-- 	end
-	-- end
-
-	-- local horiz_align = "center"
-	-- if string_find(self.align, "left") then
-	-- 	horiz_align = "left"
-	-- elseif string_find(self.align, "right") then
-	-- 	horiz_align = "right"
-	-- end
-
-	-- local num_lines = #lines
-	-- local vert_align = "center"
-	-- if string_find(self.align, "top") then
-	-- 	vert_align = "top"
-	-- elseif string_find(self.align, "bottom") then
-	-- 	vert_align = "bottom"
-	-- end
-
-	-- local start_y = self.y
-	-- if vert_align == "top" then
-	-- 	start_y = self.y
-	-- elseif vert_align == "bottom" then
-	-- 	start_y = self.y + self.h - num_lines
-	-- else  -- center
-	-- 	start_y = self.y + _floor((self.h - num_lines) / 2)
-	-- end
-	-- start_y = _max(start_y, self.y)
-
-	-- for i = self.y, start_y - 1 do
-	-- 	term.setBackgroundColor(bg_override); term.setCursorPos(self.x, i); term.setTextColor(txtcol_override); term.write(_rep(" ", self.w))
-	-- end
-
-	-- for j = 1, num_lines do
-	-- 	local line = lines[j]
-	-- 	local line_len = #line
-	-- 	local x_pos = self.x
-	-- 	if horiz_align == "left" then
-	-- 		x_pos = self.x
-	-- 	elseif horiz_align == "right" then
-	-- 		x_pos = self.x + self.w - line_len
-	-- 	else  -- center
-	-- 		x_pos = self.x + _floor((self.w - line_len) / 2)
-	-- 	end
-	-- 	local left_pad = _rep(" ", x_pos - self.x)
-	-- 	local right_pad = _rep(" ", self.w - (x_pos - self.x + line_len))
-	-- 	local full_line = left_pad .. line .. right_pad
-	-- 	term.setBackgroundColor(bg_override); term.setCursorPos(self.x, start_y + j - 1); term.setTextColor(txtcol_override); term.write(full_line)
-	-- end
-
-	-- local end_y = start_y + num_lines - 1
-	-- for i = end_y + 1, self.y + self.h - 1 do
-	-- 	term.setBackgroundColor(bg_override); term.setCursorPos(self.x, i); term.setTextColor(txtcol_override); term.write(_rep(" ", self.w))
-	-- end
+	local offset = 0
+	if self.radius then
+		offset = self.radius
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
+	else
+		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
+	end
+	if self.bold then
+		font.boldAlignedText(self.text, self.x + offset, self.y, self.fc)
+	else
+		font.simpleText(self.text, self.x + offset, self.y, self.fc, self.w, self.h, self.align)
+	end
 end
 
 local function Label_setText(self, text)
-	self.text = text
+	self.text = tostring(text)
 	self.dirty = true
 end
 
@@ -1171,6 +859,7 @@ function UI.Label(args)
 
 	instance.text = args.text or ""
 	instance.align = args.align or "center"
+	-- instance.bold = args.bold
 
 	instance.draw = Label_draw
 	instance.setText = Label_setText
@@ -1181,39 +870,28 @@ end
 local function Button_draw(self)
 	local bc = self.bc
 	local fc = self.fc
-	-- if self.held then
-	-- 	if self.fc_cl then
-	-- 		local bg = self.bc_cl or self.bc
-	-- 		Label_draw(self, bg, self.fc_cl)
-	-- 	else
-	-- 		Label_draw(self, self.fc, self.bc)
-	-- 	end
-	-- else
-	-- 	if self.hovered and self.bc_hv and self.fc_hv then
-	-- 		Label_draw(self, self.bc_hv, self.fc_hv)
-	-- 	else
-	-- 		Label_draw(self, self.bc, self.fc)
-	-- 	end
-	-- end
 	if self.held then
 		bc = self.bc_cl or self.fc
 		fc = self.fc_cl or self.bc
 	end
 	if self.radius then
-		draw_curved_corners(self.x ,self.y, self.w, self.h, self.radius, bc)
+		g.draw_filled_rounded_rect(self.x ,self.y, self.w, self.h, self.radius, bc)
 	else
 		term.drawPixels(self.x, self.y, bc, self.w, self.h)
 	end
-	f:draw(self.text, self.x, self.y, fc)
+	-- font.simpleText(self.text, self.x + 1, self.y + 1, fc)
+	font.simpleText(self.text, self.x, self.y, fc, self.w, self.h, 'center')
 end
 
 local function Button_onMouseDown(self, btn, x, y)
+	if self.disabled then return true end
 	self.held = true
 	self.dirty = true
 	return true
 end
 
 local function Button_onMouseUp(self, btn, x, y)
+	if self.disabled then return true end
 	if self:check(x,y) and self.held == true then self:pressed(btn, x, y) end
 	self.held = false
 	self.dirty = true
@@ -1221,15 +899,16 @@ local function Button_onMouseUp(self, btn, x, y)
 end
 
 local function Button_onMouseMove(self, btn, x, y)
+	if self.disabled then return true end
 	if self:check(x, y) then
-		if self.hovered == false then
+		if not self.hovered then
 			self.hovered = true
 			self.dirty = true
 		end
 		return false
 	end
-	if self.hovered == true then
-		self.hovered = false
+	if self.hovered then
+		self.hovered = nil
 		self.dirty = true
 	end
 	return false
@@ -1258,7 +937,7 @@ function UI.Button(args)
 
 	instance.text = args.text or ""
 	instance.held = false
-	instance.hovered = false
+	instance.hovered = nil
 	instance.radius = args.radius
 	instance.align = args.align or "center"
 
@@ -1268,6 +947,7 @@ function UI.Button(args)
 	instance.onMouseUp = Button_onMouseUp
 	instance.onMouseMove = Button_onMouseMove
 	instance.setText = Label_setText
+	instance.setDisabled = setDisabled
 
 	return instance
 end
@@ -1401,6 +1081,7 @@ local function Running_Label_draw(self, bg_override, txtcol_override)
 end
 
 local function Running_Label_setText(self, text)
+	text = tostring(text)
 	if self.text ~= text then self.scroll_pos = 1 end
 	self.text = text
 	self:checkScrolling()
@@ -1487,38 +1168,40 @@ function UI.Running_Label(args)
 end
 
 local function Scrollbar_draw(self)
+	term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
 	local slider_height = self:getSliderHeight()
-	local slider_offset = self:getSliderOffset()
-	local slider_y_start = self.y + 1 + slider_offset
+	g.draw_filled_rounded_rect(self.x, self.y, self.w, slider_height, 2, self.fc)
+	-- local slider_offset = self:getSliderOffset()
+	-- local slider_y_start = self.y + 1 + slider_offset
 
-	term.setBackgroundColor(self.bc)
-	for y = self.y + 1, slider_y_start - 1 do
-		term.setCursorPos(self.x, y)
-		term.write(" ")
-	end
-	for y = slider_y_start + slider_height, self.y + self.h - 2 do
-		term.setCursorPos(self.x, y)
-		term.write(" ")
-	end
+	-- term.setBackgroundColor(self.bc)
+	-- for y = self.y + 1, slider_y_start - 1 do
+	-- 	term.setCursorPos(self.x, y)
+	-- 	term.write(" ")
+	-- end
+	-- for y = slider_y_start + slider_height, self.y + self.h - 2 do
+	-- 	term.setCursorPos(self.x, y)
+	-- 	term.write(" ")
+	-- end
 
-	local up_bg, up_fg = (self.held == 1 and self.fc or self.bc), (self.held == 1 and self.bc or self.fc)
-	term.setBackgroundColor(up_bg)
-	term.setTextColor(up_fg)
-	term.setCursorPos(self.x, self.y)
-	term.write("\30")
+	-- local up_bg, up_fg = (self.held == 1 and self.fc or self.bc), (self.held == 1 and self.bc or self.fc)
+	-- term.setBackgroundColor(up_bg)
+	-- term.setTextColor(up_fg)
+	-- term.setCursorPos(self.x, self.y)
+	-- term.write("\30")
 
-	local down_bg, down_fg = (self.held == 3 and self.fc or self.bc), (self.held == 3 and self.bc or self.fc)
-	term.setBackgroundColor(down_bg)
-	term.setTextColor(down_fg)
-	term.setCursorPos(self.x, self.y + self.h - 1)
-	term.write("\31")
+	-- local down_bg, down_fg = (self.held == 3 and self.fc or self.bc), (self.held == 3 and self.bc or self.fc)
+	-- term.setBackgroundColor(down_bg)
+	-- term.setTextColor(down_fg)
+	-- term.setCursorPos(self.x, self.y + self.h - 1)
+	-- term.write("\31")
 
-	term.setBackgroundColor(self.fc)
-	term.setTextColor(self.bc)
-	for y = slider_y_start, _min(slider_y_start + slider_height - 1, self.y + self.h - 2) do
-		term.setCursorPos(self.x, y)
-		term.write("\149")
-	end
+	-- term.setBackgroundColor(self.fc)
+	-- term.setTextColor(self.bc)
+	-- for y = slider_y_start, _min(slider_y_start + slider_height - 1, self.y + self.h - 2) do
+	-- 	term.setCursorPos(self.x, y)
+	-- 	term.write("\149")
+	-- end
 end
 
 local function Scrollbar_setObj(self, obj)
@@ -1677,7 +1360,7 @@ function UI.Scrollbar(obj)
 
 	local instance = UI.Widget({
 		x = obj.x + obj.w, y = obj.y,
-		w = 1, h = obj.h,
+		w = 4, h = obj.h,
 		bc = obj.bc,
 		fc = obj.fc
 	})
@@ -1902,32 +1585,33 @@ end
 
 
 local function List_draw(self)
-	term.setBackgroundColor(self.bc)
-	term.setTextColor(self.fc)
-	for i = self.scroll.pos_y + 1, _min(self.h + self.scroll.pos_y, #self.array) do
+	local scroll = self.scroll
+	term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
+	for i = scroll.pos_y + 1, _min(math.floor(self.h/8) + scroll.pos_y, #self.array) do
 		local index_arr = self.array[i]
-		term.setCursorPos(self.x, (i - self.scroll.pos_y - 1) + self.y)
-		term.write(_sub(index_arr.._rep(" ", self.w - #index_arr), 1, self.w))
+		i = i - 1
+		-- term.write(_sub(index_arr.._rep(" ", self.w - #index_arr), 1, self.w))
+		font.simpleText(index_arr, self.x + 1, self.y + ((i- scroll.pos_y)*8) + 1 , self.fc)
 	end
 	if self.item and self.item_index then
-		if (self.y + self.item_index - self.scroll.pos_y - 1) >= self.y and (self.y + self.item_index - self.scroll.pos_y - 1) <= (self.h + self.y - 1) then
-			term.setBackgroundColor(self.fc)
-			term.setTextColor(self.bc)
-			term.setCursorPos(self.x, self.y + self.item_index - self.scroll.pos_y - 1)
-			term.write(_sub(self.item.._rep(" ",self.w - #self.item), 1, self.w))
+		if (self.y + self.item_index - scroll.pos_y - 1) >= self.y and (self.y + self.item_index - scroll.pos_y - 1) <= (self.h + self.y - 1) then
+			-- term.write(_sub(self.item.._rep(" ",self.w - #self.item), 1, self.w))
+			term.drawPixels(self.x, self.y + ((self.item_index - 1) * 8), self.fc, self.w, 9)
+			font.simpleText(self.item, self.x + 1, self.y + ((self.item_index - 1) * 8) + 1, self.bc)
 		end
 	end
-	if self.h > #self.array then
-		term.setBackgroundColor(self.bc)
-		term.setTextColor(self.fc)
-		for i = #self.array, self.h - 1 do
-			term.setCursorPos(self.x, i + self.y)
-			term.write(_sub(_rep(" ", self.w), 1, self.w))
-		end
-	end
+	-- if self.h > #self.array then
+	-- 	term.setBackgroundColor(self.bc)
+	-- 	term.setTextColor(self.fc)
+	-- 	for i = #self.array, self.h - 1 do
+	-- 		term.setCursorPos(self.x, i + self.y)
+	-- 		term.write(_sub(_rep(" ", self.w), 1, self.w))
+	-- 	end
+	-- end
 end
 
 local function List_updateArr(self, array)
+	if type(array) ~= 'table' then return error('list:updateArr(arg?) -> (arg ~= table)', 2) end
 	self.array = array
 	self.item = nil
 	self.item_index = nil
@@ -1945,6 +1629,7 @@ end
 
 local function List_onMouseDown(self, btn, x, y)
 	local i = y - self.y + 1 + self.scroll.pos_y
+	i = math.floor(i / 8) + 1
 	if i <= #self.array then
 		if self.item and self.item == self.array[i] then
 			self:pressed(self.item, self.item_index)
@@ -2010,12 +1695,12 @@ function UI.List(args)
 	local instance = UI.Widget(args)
 
 	add_mixin(instance, ScrollableMixin)
-	instance:initScroll(3, 3)
+	instance:initScroll(args.sensitivity_x or 3, args.sensitivity_y or 3)
 	instance.array = args.array
 	instance.item = nil
 	instance.item_index = nil
 	function instance:getScrollMaxY()
-		return _max(0, #self.array - self.h)
+		return _max(0, #self.array - math.floor(self.h/8))
 	end
 
 	instance.draw = List_draw
@@ -2031,46 +1716,52 @@ function UI.List(args)
 end
 
 local function Textfield_draw(self)
-	term.setBackgroundColor(self.bc)
-	term.setCursorPos(self.x, self.y)
+	local offset = 1
+	if self.radius then
+		offset = self.radius
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
+	else
+		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
+	end
 	local text = self.text
 	if self.hidden == true then
 		text = _rep("*", #self.text)
 	end
-	if self.root.focus ~= self and #self.text == 0 and #self.hint <= self.w then
-		term.setTextColor(colors.lightGray)
-		term.write(self.hint.._rep(" ", self.w - #self.hint))
+	if self.root.focus ~= self and #self.text == 0 and #self.hint*6 <= self.w then
+		font.simpleText(self.hint, self.x+offset, self.y, self.fc_alt)
 		return
 	end
-	term.setTextColor(self.fc)
-	term.write(text:sub(self.offset + 1, _min(#self.text, self.offset + self.w)).._rep(" ", self.w - #self.text + self.offset))
-	if self.selected.status then
-		term.setBackgroundColor(self.bc_alt or colors.blue)
-		term.setTextColor(self.fc_alt or colors.white)
-		local sel_x_start = self.selected.pos1_x
-		local draw_x = self.x + (sel_x_start - 1) - self.offset
-		if draw_x < self.x then
-			sel_x_start = sel_x_start + (self.x - draw_x)
-			draw_x = self.x
-		end
-		local sel_x_end = _min(self.w + self.offset, self.selected.pos2_x)
-		local sel_text = text:sub(sel_x_start, sel_x_end)
-		term.setCursorPos(draw_x, self.y)
-		term.write(sel_text)
-	end
+	font.simpleText(text, self.x+offset, self.y, self.fc)
+	-- if self.selected.status then
+	-- 	term.setBackgroundColor(self.bc_alt or colors.blue)
+	-- 	term.setTextColor(self.fc_alt or colors.white)
+	-- 	local sel_x_start = self.selected.pos1_x
+	-- 	local draw_x = self.x + (sel_x_start - 1) - self.offset
+	-- 	if draw_x < self.x then
+	-- 		sel_x_start = sel_x_start + (self.x - draw_x)
+	-- 		draw_x = self.x
+	-- 	end
+	-- 	local sel_x_end = _min(self.w + self.offset, self.selected.pos2_x)
+	-- 	local sel_text = text:sub(sel_x_start, sel_x_end)
+	-- 	term.setCursorPos(draw_x, self.y)
+	-- 	term.write(sel_text)
+	-- end
 end
 
 local function Textfield_focusPostDraw(self)
 	local cursor = colors.blue
 	if self.selected.status then cursor = colors.red end
-	term.setTextColor(cursor)
-	local x = self.x + self.cursor_x - self.offset - 1
-	term.setCursorPos(x, self.y)
-	if x < self.x or x > self.x + self.w - 1 then
-		term.setCursorBlink(false)
-	else
-		term.setCursorBlink(true)
-	end
+	-- term.setTextColor(cursor)
+	-- local x = self.x + self.cursor_x - self.offset - 1
+	-- term.setCursorPos(x, self.y)
+	-- if x < self.x or x > self.x + self.w - 1 then
+	-- 	term.setCursorBlink(false)
+	-- else
+	-- 	term.setCursorBlink(true)
+	-- end
+	local cursor_x = self.x + 1 + (font.calcWidth(self.text:sub(1, self.cursor_x - 1)))
+	local cursor_y = self.y
+	if self.need_to_blink then font.simpleText('|', cursor_x, cursor_y, colors.blue) end
 end
 
 local function delete_selected_tf(self)
@@ -2121,6 +1812,7 @@ local function Textfield_onFocus(self, focused)
 	if not focused then self.selected.status = false end
 	term.setCursorBlink(focused)
 	self.dirty = true
+	-- self.blink_enable = true
 	return true
 end
 
@@ -2235,6 +1927,27 @@ local function Textfield_onKeyDown(self, key, held)
 	return true
 end
 
+local function Textfield_refreshBlinkStatus(self)
+	if self.blink_enable and not self.timer_id then
+		self.timer_id = os.startTimer(self.blink_speed)
+	end
+end
+
+local function Textfield_onEvent(self, evt)
+	if evt[1] == "timer" and evt[2] == self.timer_id then
+		if self.blink_enable then
+			self.dirty = true
+			self.need_to_blink = not self.need_to_blink
+			self.timer_id = os.startTimer(self.blink_speed)
+		else
+			self.timer_id = nil
+		end
+		-- return true
+	end
+	-- self:refreshBlinkStatus()
+	return onEvent(self,evt)
+end
+
 ---Creating new *object* of *class*
 ---@class Textfield
 ---@field x number X pos in characters
@@ -2247,7 +1960,7 @@ end
 ---@param args Textfield Initialization table with fields above
 ---@return table object Textfield
 function UI.Textfield(args)
-	args.h = 1
+	args.fc_alt = args.fc_alt or colors.lightGray
 	local instance = UI.Widget(args)
 
 	instance.offset = 0
@@ -2255,6 +1968,10 @@ function UI.Textfield(args)
 	instance.text = ""
 	instance.cursor_x = #instance.text + 1
 	instance.hidden = args.hidden or false
+	instance.need_to_blink = false
+	instance.blink_enable = true
+	instance.timer_id = nil
+	instance.blink_speed = 0.5
 	instance.selected = {
 		status = false,
 		pos1_x = 1,
@@ -2268,12 +1985,14 @@ function UI.Textfield(args)
 	instance.onMouseDrag = Textfield_onMouseDrag
 	instance.onFocus = Textfield_onFocus
 	instance.pressed = pressed
-	instance.focusPostDraw = Textfield_focusPostDraw
+	-- instance.focusPostDraw = Textfield_focusPostDraw
 	instance.onMouseDown = Textfield_onMouseDown
 	instance.onCharTyped = Textfield_onCharTyped
 	instance.onPaste = Textfield_onPaste
 	instance.onKeyDown = Textfield_onKeyDown
 	instance.onKeyUp = Textfield_onKeyUp
+	-- instance.refreshBlinkStatus = Textfield_refreshBlinkStatus
+	instance.onEvent = Textfield_onEvent
 
 	return instance
 end
@@ -2640,7 +2359,7 @@ function UI.TextBox(args)
 	local instance = UI.Widget(args)
 
 	add_mixin(instance, ScrollableMixin)
-	instance:initScroll(3, 3)
+	instance:initScroll(args.sensitivity_x or 3, args.sensitivity_y or 3)
 	instance.TabSize = args.TabSize or 4
 	instance.lines = {""}
 	instance.cursor = {x = 1, y = 1}
@@ -2817,65 +2536,121 @@ function UI.Clock(args)
 	return instance
 end
 
+local function Timer_getRemainingMs(self)
+	if not self.running then
+		return self.time * 1000  -- замороженное время
+	end
+	return self.expiration - os.epoch("utc")
+end
+
 local function Timer_updateTime(self)
+	if not self.running then return end
+
 	-- local now = os.epoch("utc") / 1000
+	-- local delay
+	-- if self.show_seconds then
+		-- local frac = now - _floor(now)
+		-- delay = 1 - frac
+	-- else
+	-- 	local seconds_into_minute = now % 60
+	-- 	delay = 60 - seconds_into_minute
+	-- end
+	-- self.timer = os.startTimer(delay)
 
-	-- local frac = now - _floor(now)
-	-- local delay = 1 - frac
+	local remainingMs = self:getRemainingMs()
+	if remainingMs <= 0 then
+		self:pause()
+		self:pressed()
+		return
+	end
 
-	local delay = 1
+	-- Обновляем отображаемое время (целые секунды)
+	self.time = math.floor((remainingMs / 1000) + 0.5)
+	-- self.time = (remainingMs / 1000)
+	-- self.dirty = true
+
+	-- Вычисляем точную задержку до следующей смены секунды на экране
+	local remainingSec = remainingMs / 1000
+	local frac = remainingSec % 1
+	local delay = (frac == 0) and 1 or frac
 
 	self.timer = os.startTimer(delay)
-	self.time = self.time - 1
-	if self.time <=0 then log("Timer end") self:pause() end
-	self.dirty = true
 end
 
 local function Timer_pause(self)
+	if not self.running then return false end
+
 	os.cancelTimer(self.timer)
 	self.timer = nil
+	self.running = false
+
+	-- Замораживаем ТОЧНОЕ оставшееся время (в секундах)
+	local remainingMs = self:getRemainingMs()
+	self.time = math.max(0, math.floor(remainingMs / 1000))
+
 	return true
 end
 
-local function Timer_unpause(self)
-	return self:updateTime()
+local function Timer_unPause(self)
+	if self.running then return false end
+
+	self.running = true
+	local now = os.epoch("utc")
+	self.expiration = now + self.time * 1000
+
+	return self:updateTime()  -- сразу запустит таймер
 end
 
 local function Timer_setTime(self, sec)
-	if type(sec) == 'number' then
-		self.time = sec
+	if type(sec) ~= "number" then return false end
+
+	self.time = math.max(0, math.floor(sec))
+
+	if self.running then
+		-- Если таймер уже запущен — перезапускаем с новым временем
+		local now = os.epoch("utc")
+		self.expiration = now + self.time * 1000
 		self:updateTime()
-		return true
 	end
-	return false
+	-- Если на паузе — просто меняем замороженное значение
+
+	self.dirty = true
+	return true
 end
 
 local function Timer_addTime(self, sec)
-	return Timer_setTime(self, self.time + sec)
+	if not sec then return end
+	return self:setTime(self.time + sec)
 end
 
 local function Timer_draw(self)
-	term.setBackgroundColor(self.bc)
-	term.setCursorPos(self.x, self.y)
-	term.setTextColor(self.fc)
-	local time = self.time
-	local text = tostring(time)
-	text = text:sub(_max(1, #text - self.w), -1)
-	term.write(text)
+	local offset = self.radius or 1
+	if self.radius then
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
+	else
+		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
+	end
+	local time = self.time and os.date("!%X", self.time) or '--:--:--'
+	font.drawText(time, self.x + offset, self.y, self.fc)
 end
 
 function UI.Timer(args)
 	local instance = UI.Widget(args)
 
-	instance.deltaTime = args.deltaTime or 0
-	instance.time = args.time or 0
-	instance.format = "%H:%M:%S"
+	instance.time = args.time
+	instance.running = false          -- по умолчанию на паузе
+	instance.expiration = 0
 
 	instance.draw = Timer_draw
 	instance.updateTime = Timer_updateTime
-	instance.onEvent = Clock_onEvent
+	instance.onEvent = Clock_onEvent   -- или твой обработчик
 	instance.pause = Timer_pause
-	instance.unpause = Timer_unpause
+	instance.setTime = Timer_setTime
+	instance.addTime = Timer_addTime
+	instance.unPause = Timer_unPause
+
+	-- Вспомогательный метод (для внутреннего использования)
+	instance.getRemainingMs = Timer_getRemainingMs
 
 	return instance
 end
@@ -2889,39 +2664,46 @@ end
 
 local function LoadingBar_draw(self)
 	local LoadX = math.floor(self.value * self.w)
-	if self.orientation == "top" then
-		term.setBackgroundColor(self.bc)
-		term.setTextColor(self.color_Loading)
-		term.setCursorPos(self.x, self.y)
-		term.write(_rep("\131", LoadX))
-		term.setTextColor(self.color_NotLoaded)
-		term.setCursorPos(self.x + LoadX, self.y)
-		term.write(_rep("\131", self.w - LoadX))
-	elseif self.orientation == "center"  then
-		term.setBackgroundColor(self.bc)
-		term.setTextColor(self.color_Loading)
-		term.setCursorPos(self.x, self.y)
-		term.write(_rep("\140", LoadX))
-		term.setTextColor(self.color_NotLoaded)
-		term.setCursorPos(self.x + LoadX, self.y)
-		term.write(_rep("\140", self.w - LoadX))
-	elseif self.orientation == "bottom"  then
-		term.setBackgroundColor(self.color_Loading)
-		term.setTextColor(self.bc)
-		term.setCursorPos(self.x, self.y)
-		term.write(_rep("\143", LoadX))
-		term.setBackgroundColor(self.color_NotLoaded)
-		term.setCursorPos(self.x + LoadX, self.y)
-		term.write(_rep("\143", self.w - LoadX))
-	elseif self.orientation == "filled"  then
-		term.setBackgroundColor(self.color_Loading)
-		term.setTextColor(self.bc)
-		term.setCursorPos(self.x, self.y)
-		term.write(_rep(" ", LoadX))
-		term.setBackgroundColor(self.color_NotLoaded)
-		term.setCursorPos(self.x + LoadX, self.y)
-		term.write(_rep(" ", self.w - LoadX))
+	if self.radius then
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
+		-- g.draw_filled_rounded_rect(self.x, self.y, LoadX, self.h, self.radius, self.color_Loading)
+	else
+		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
 	end
+	term.drawPixels(self.x, self.y, self.color_Loading, LoadX, self.h)
+	-- if self.orientation == "top" then
+	-- 	term.setBackgroundColor(self.bc)
+	-- 	term.setTextColor(self.color_Loading)
+	-- 	term.setCursorPos(self.x, self.y)
+	-- 	term.write(_rep("\131", LoadX))
+	-- 	term.setTextColor(self.color_NotLoaded)
+	-- 	term.setCursorPos(self.x + LoadX, self.y)
+	-- 	term.write(_rep("\131", self.w - LoadX))
+	-- elseif self.orientation == "center"  then
+	-- 	term.setBackgroundColor(self.bc)
+	-- 	term.setTextColor(self.color_Loading)
+	-- 	term.setCursorPos(self.x, self.y)
+	-- 	term.write(_rep("\140", LoadX))
+	-- 	term.setTextColor(self.color_NotLoaded)
+	-- 	term.setCursorPos(self.x + LoadX, self.y)
+	-- 	term.write(_rep("\140", self.w - LoadX))
+	-- elseif self.orientation == "bottom"  then
+	-- 	term.setBackgroundColor(self.color_Loading)
+	-- 	term.setTextColor(self.bc)
+	-- 	term.setCursorPos(self.x, self.y)
+	-- 	term.write(_rep("\143", LoadX))
+	-- 	term.setBackgroundColor(self.color_NotLoaded)
+	-- 	term.setCursorPos(self.x + LoadX, self.y)
+	-- 	term.write(_rep("\143", self.w - LoadX))
+	-- elseif self.orientation == "filled"  then
+	-- 	term.setBackgroundColor(self.color_Loading)
+	-- 	term.setTextColor(self.bc)
+	-- 	term.setCursorPos(self.x, self.y)
+	-- 	term.write(_rep(" ", LoadX))
+	-- 	term.setBackgroundColor(self.color_NotLoaded)
+	-- 	term.setCursorPos(self.x + LoadX, self.y)
+	-- 	term.write(_rep(" ", self.w - LoadX))
+	-- end
 end
 
 ---@class LoadingBar
@@ -2936,13 +2718,9 @@ end
 ---@field color_NotLoaded color|number Color used for unloaded portion
 ---@param args LoadingBar Initialization table with fields above
 function UI.LoadingBar(args)
-	args.h = 1
 	local instance = UI.Widget(args)
 
 	instance.orientation = orientation or "center"
-	instance.bc = args.bc
-	instance.color_Loading = args.color_Loading
-	instance.color_NotLoaded = args.color_NotLoaded
 	instance.value = args.value or 0
 
 	instance.draw = LoadingBar_draw
@@ -2952,70 +2730,66 @@ function UI.LoadingBar(args)
 end
 
 local function Dropdown_draw(self)
-	local index_arr = self.array[self.item_index]
-	if self.orientation == "left" then
-		term.setBackgroundColor(self.bc)
-		term.setTextColor(self.fc)
-		term.setCursorPos(self.x, self.y)
-		term.write(_sub((index_arr), 1, self.w - 1).._rep(" ", self.w - 1 - #index_arr).."\18")
-		if self.expanded then
-			for i, v in pairs(self.array) do
-				term.setBackgroundColor(self.bc)
-				term.setTextColor(self.fc)
-				term.setCursorPos(self.x, self.y + i)
-				term.write(_sub((v.._rep(" ", self.w - #v)), 1, self.w))
-			end
-			term.setBackgroundColor(self.bc)
-			term.setTextColor(self.fc)
-			term.setCursorPos(self.x, self.y)
-			term.write(_sub((index_arr), 1, self.w - 1).._rep(" ", self.w - 1 - #index_arr).."\18")
-			self.h = #self.array + 1
-		else
-			self.h = 1
-		end
-	elseif self.orientation == "right" then
-		term.setBackgroundColor(self.bc)
-		term.setTextColor(self.fc)
-		term.setCursorPos(self.x, self.y)
-		term.write(_sub(index_arr.._rep(" ", self.w - 1 - #index_arr).."\18", 1, self.w))
-		if self.expanded then
-			for i, v in pairs(self.array) do
-				term.setBackgroundColor(self.bc)
-				term.setTextColor(self.fc)
-				term.setCursorPos(self.x, self.y + i)
-				term.write(_sub(_rep(" ", self.w - #v)..v, 1, self.w))
-			end
-			term.setBackgroundColor(self.bc)
-			term.setTextColor(self.fc)
-			term.setCursorPos(self.x, self.y)
-			term.write(_sub(index_arr, 1, self.w - 1).._rep(" ", self.w - 1 - #index_arr).."\18")
-			self.h = #self.array + 1
-		else
-			self.h = 1
-		end
+	local element = self.array[self.item_index]
+
+	if self.radius then
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, 10, self.radius, self.bc)
 	else
-		error("Bad argument init.dropdown(#6): " .. tostring(self.orientation))
+		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
 	end
+	if element then
+		font.simpleText(element, self.x + 3, self.y, self.fc)
+	end
+	font.simpleText('↕', self.x + self.w - 7, self.y, self.fc)
+	-- for ay = 0, 5 do
+	-- 	term.setPixel(self.x + self.w - 7, self.y + 1)
+	-- end
 end
 
-local function Dropdown_onFocus(self,focused)
-	if not focused and self.expanded then
-		self.expanded = false
-		self.parent:onLayout()
-		self.dirty = true
+local function context_onFocus(self, focused)
+	local dropdown = self.dropdown
+	if not focused then
+		self.root:removeChild(self)
+		self.root:onLayout()
 	end
+
 	return true
 end
 
-local function Dropdown_onMouseDown(self, btn, x, y)
-	if (y - self.y) > 0 then self.item_index = _min(_max(y - self.y, 1), #self.array) end
-	self.expanded = not self.expanded
-	if self.expanded == false then
-		self.parent:onLayout()
-		self:pressed(self.array[self.item_index])
+local function contextMouseDown(self, btn, x, y)
+	local dropdown = self.dropdown
+	local lY = y - self.y
+	dropdown.item_index = math.floor(lY / 10) + 1
+	dropdown:pressed(dropdown.array[dropdown.item_index])
+	self.root:removeChild(self)
+	self.root:onLayout()
+
+	return true
+end
+
+local function contextDraw(self) -- ВРЕМЕННОЕ НАДО МЕНЯТЬ
+	local dropdown = self.dropdown
+	if self.radius then
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
 	else
-		self.dirty = true
+		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
 	end
+	for i, v in pairs(dropdown.array) do
+		font.simpleText(v, self.x + 3, self.y + ((i - 1) * 10), self.fc)
+	end
+end
+
+local function Dropdown_onMouseDown(self, btn, x, y)
+	if self.disabled then return true end
+
+	local box = UI.Box{ x = self.x, y = _min(self.root.h - #self.array*10, _max(0, self.y - ((self.item_index - 1) * 10))), w = self.w, h = #self.array*10, bc = self.bc, fc = self.fc, radius = self.radius}
+	box.dropdown = self
+	self.root:addChild(box)
+	self.root.focus = box
+	box.draw = contextDraw
+	box.onMouseDown = contextMouseDown
+	box.onFocus = context_onFocus
+
 	return true
 end
 
@@ -3026,14 +2800,14 @@ end
 ---@field w? number Width in characters
 ---@field array? string[] Options array
 ---@field maxSizeW? number Max value for width
----@field defaultValue? number Default selected index
+---@field defaultIndex? number Default selected index
+---@field defaultValue? number Default selected value
 ---@field orientation? string "left" or "right"
 ---@field bc color|number Background color
 ---@field fc color|number Foreground/text color
 ---@param args Dropdown Initialization table with fields above
 ---@return table object dropdown
 function UI.Dropdown(args)
-	args.h = 1
 	local instance = UI.Widget(args)
 
 	instance.array = args.array or {}
@@ -3045,52 +2819,58 @@ function UI.Dropdown(args)
 				break
 			end
 		end
+	elseif args.defaultIndex then
+		if args.defaultIndex >= 1 and args.defaultIndex <= #instance.array then instance.item_index = args.defaultIndex end
 	end
 	instance.orientation = orientation or "left"
-	if type(maxSizeW) ~= "number" then maxSizeW = nil end
-	instance.w = args.maxSizeW or c.findMaxLenStrOfArray(instance.array) + 1
-	instance.expanded = false
+	if type(args.maxSizeW) ~= "number" then args.maxSizeW = nil end
 
 	instance.draw = Dropdown_draw
-	instance.onFocus = Dropdown_onFocus
 	instance.pressed = pressed
 	instance.onMouseDown = Dropdown_onMouseDown
+	instance.setDisabled = setDisabled
 
 	return instance
 end
 
 local function Slider_draw(self)
+	term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
+	g.draw_filled_rounded_rect(self.x, self.y + 1, self.w, self.h - 2, self.h, colors.white)
 	local N = #self.arr
-	local W = self.w
+	local i = self.slidePosition
+	local offset = (N == 1) and 0 or _min(_floor((i - 1) / (N - 1) * (self.w - self.h)), self.w - 1)
+	local cl = self.held and self.fc_cl or colors.lightGray
+	g.draw_filled_rounded_rect(self.x, self.y + 1, offset + 1, self.h - 2, self.h, self.fc_alt)
+	g.draw_filled_circle(self.x + offset, self.y, self.h, cl)
 
-	if N > 0 then
-		local i = self.slidePosition
-		local offset = (N == 1) and 0 or _min(_floor((i - 1) / (N - 1) * (W - 1)), self.w - 1)
-		local thumb_x = self.x + offset
+	-- local W = self.w
 
- 		if self.held and self.fc_cl then
-			term.setBackgroundColor(self.fc_cl)
-		else
-			-- term.setBackgroundColor(self.fc)
-			term.setBackgroundColor(self.bc_alt or self.bc)
-		end
+	-- if N > 0 then
+	-- 	local thumb_x = self.x + offset
 
- 		term.setCursorPos(thumb_x, self.y)
- 		term.write(" ")
- 		term.setBackgroundColor(self.bc)
- 		term.setTextColor(self.fc_alt)
- 		term.setCursorPos(self.x, self.y)
- 		term.write(("\140"):rep(offset))
- 		term.setBackgroundColor(self.bc)
- 		term.setTextColor(self.fc)
- 		term.setCursorPos(thumb_x + 1, self.y)
- 		term.write(("\140"):rep(self.w - offset - 1))
-	else
- 		term.setBackgroundColor(self.bc)
- 		term.setTextColor(self.fc)
- 		term.setCursorPos(self.x, self.y)
- 		term.write(("\140"):rep(W))
-	end
+ 	-- 	if self.held and self.fc_cl then
+	-- 		term.setBackgroundColor(self.fc_cl)
+	-- 	else
+	-- 		-- term.setBackgroundColor(self.fc)
+	-- 		term.setBackgroundColor(self.bc_alt or self.bc)
+	-- 	end
+
+ 	-- 	term.setCursorPos(thumb_x, self.y)
+ 	-- 	term.write(" ")
+ 	-- 	term.setBackgroundColor(self.bc)
+ 	-- 	term.setTextColor(self.fc_alt)
+ 	-- 	term.setCursorPos(self.x, self.y)
+ 	-- 	term.write(("\140"):rep(offset))
+ 	-- 	term.setBackgroundColor(self.bc)
+ 	-- 	term.setTextColor(self.fc)
+ 	-- 	term.setCursorPos(thumb_x + 1, self.y)
+ 	-- 	term.write(("\140"):rep(self.w - offset - 1))
+	-- else
+ 	-- 	term.setBackgroundColor(self.bc)
+ 	-- 	term.setTextColor(self.fc)
+ 	-- 	term.setCursorPos(self.x, self.y)
+ 	-- 	term.write(("\140"):rep(W))
+	-- end
 end
 
 local function Slider_updatePos(self, x, y)
@@ -3141,7 +2921,6 @@ end
 ---@param args Slider Initialization table with fields above
 ---@return table object slider
 function UI.Slider(args)
-	args.h = 1
 	local instance = UI.Widget(args)
 
 	instance.held = false
@@ -3812,7 +3591,6 @@ local function TableView_draw(self)
 		-- line = string.sub(line..v.title..string.rep(" ", v.w-#v.title), 1, v.w - 1) .. "|"
 		line = line .. v.title:sub(1, v.w) .. string.rep(" ", v.w - #v.title).."|"
 		v.x = self.x + #line - 1
-		-- log(v.x)
 	end
 	term.write(line)
 	-- local line = "Name"
