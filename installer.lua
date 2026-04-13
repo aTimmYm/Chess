@@ -12,6 +12,7 @@ local function checkUpdates(shaSum)
 	for line in shaSum:gmatch('([^\n]+)\n?') do
 		local path = line:sub(66)
 		table.insert(filesToUpdate, path)
+		ret = true
 	end
 	return ret, filesToUpdate
 end
