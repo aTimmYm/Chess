@@ -18,7 +18,7 @@ if fs.exists(userSettings) then
 	file = fs.open(userSettings, 'r')
 	user = file.readAll()
 else
-	local data = '{"Volume":15,"Nickname":"Unknown","OutputDevice":"","Language":"eng","ColorScheme":"Default","ServerType":"Rednet"}'
+	local data = '{"Volume":15,"Nickname":"Unknown","OutputDevice":"","Language":"eng","ColorScheme":"Default","ServerType":"Rednet","PieceScheme":"Letters"}'
 	file = fs.open(userSettings, 'w')
 	file.write(data)
 	user = data
