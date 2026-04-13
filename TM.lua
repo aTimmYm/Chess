@@ -225,13 +225,14 @@ local function checkUpdates(shaSum)
 	for path, hash in pairs(userList) do
 		if not hashList[path] then
 			-- log('deletE:' .. path)
-			-- fs.delete(path)
+			fs.delete(path)
 			ret = true
 		end
 	end
 	for path, hash in pairs(hashList) do
 		if not userList[path] or userList[path] ~= hash then
 			table.insert(filesToUpdate, path)
+			ret = true
 		end
 	end
 	return ret, filesToUpdate
