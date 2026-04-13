@@ -4,7 +4,7 @@ local speaker = require "Speaker"
 local Screen = require "ScreenManager"
 local Chess = require "Chess"
 local network = require "Network"
-local inspector = require "inspector"
+-- local inspector = require "inspector"
 local sha = require "sha2"
 
 local port = 22856
@@ -15,7 +15,7 @@ if fs.exists(userSettings) then
 	file = fs.open(userSettings, 'r')
 	user = file.readAll()
 else
-	local data = '{"Volume":15,"Nickname":"Unknown","OutputDevice":"","Language":"eng","ColorScheme":"Default","ServerType":"Rednet"}'
+	local data = '{"Volume":15,"Nickname":"Unknown","OutputDevice":"","Language":"eng","ColorScheme":"Default","ServerType":"Rednet","PieceScheme":"Letters"}'
 	file = fs.open(userSettings, 'w')
 	file.write(data)
 	user = data
@@ -918,7 +918,7 @@ function JoinMenu.new()
 		if user.ServerType == 'Rednet' then
 			ret, err = network:connectToServer(page.tfIP.text)
 		else
-			ret, err = network:connectToServer(page.tfIP.text, 22856)
+			ret, err = network:connectToServer(page.tfIP.text, port)
 		end
 		if not ret then
 			page.labelError.fc = colors.red
@@ -980,7 +980,7 @@ function MainMenu.new()
 		if user.ServerType == 'Rednet' then
 			ret, err = network:startServer()
 		else
-			network:startServer(22856)
+			network:startServer(port)
 		end
 		if not ret then
 			error(err)

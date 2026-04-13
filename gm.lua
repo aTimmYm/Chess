@@ -10,6 +10,7 @@ local localization = dofile('Data/localization.lua')
 local g = require 'geometry'
 local sha = require 'sha2'
 
+local port = 22856
 local userSettings = 'Data/user.json'
 local file, user
 
@@ -949,7 +950,7 @@ function JoinMenu.new()
 		if user.ServerType == 'Rednet' then
 			ret, err = network:connectToServer(page.tfIP.text)
 		else
-			ret, err = network:connectToServer(page.tfIP.text, 22856)
+			ret, err = network:connectToServer(page.tfIP.text, port)
 		end
 		if not ret then
 			page.labelError.fc = colors.red
@@ -1012,7 +1013,7 @@ function MainMenu.new()
 		if user.ServerType == 'Rednet' then
 			ret, err = network:startServer()
 		else
-			network:startServer(22856)
+			network:startServer(port)
 		end
 		if not ret then
 			error(err)
