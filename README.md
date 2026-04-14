@@ -10,18 +10,18 @@ Play locally or online with friends on ComputerCraft computers.
 <div style="display: flex; flex-wrap: wrap; gap: 20px; justify-content: center;">
   
   <div style="text-align: center; flex: 1 1 45%; max-width: 480px;">
-    <img src="screenshot/mainmenu.png" width="100%" style="border-radius: 8px;">
-    <img src="screenshot/mainmenu_gm.png" width="100%" style="border-radius: 8px;">
+    <img src="screenshots/mainmenu.png" width="100%" style="border-radius: 8px;">
+    <img src="screenshots/mainmenu_gm.png" width="100%" style="border-radius: 8px;">
   </div>
   
   <div style="text-align: center; flex: 1 1 45%; max-width: 480px;">
-    <img src="screenshot/lobby.png" width="100% "style="border-radius: 8px;">
-    <img src="screenshot/lobby_gm.png" width="100%" style="border-radius: 8px;">
+    <img src="screenshots/lobby.png" width="100% "style="border-radius: 8px;">
+    <img src="screenshots/lobby_gm.png" width="100%" style="border-radius: 8px;">
   </div>
   
   <div style="text-align: center; flex: 1 1 45%; max-width: 480px;">
-    <img src="screenshot/game.png" width="100%" style="border-radius: 8px;">
-    <img src="screenshot/game_gm.png" width="100%" style="border-radius: 8px;">
+    <img src="screenshots/game.png" width="100%" style="border-radius: 8px;">
+    <img src="screenshots/game_gm.png" width="100%" style="border-radius: 8px;">
   </div>
 
 </div>
