@@ -873,26 +873,26 @@ function JoinMenu.new()
 		Screen:switch('mainMenu')
 	end
 
-	page.btnL = UI.Button{x = 6, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'L'}
-	page.surface:addChild(page.btnL)
-	page.btnL.pressed = function (self)
-		page.tfIP.text = 'localhost'
-		page.tfIP.dirty = true
-	end
+	-- page.btnL = UI.Button{x = 6, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'L'}
+	-- page.surface:addChild(page.btnL)
+	-- page.btnL.pressed = function (self)
+	-- 	page.tfIP.text = 'localhost'
+	-- 	page.tfIP.dirty = true
+	-- end
 
-	page.btnV = UI.Button{x = 8, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'V'}
-	page.surface:addChild(page.btnV)
-	page.btnV.pressed = function (self)
-		page.tfIP.text = '192.168.191.153'
-		page.tfIP.dirty = true
-	end
+	-- page.btnV = UI.Button{x = 8, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'V'}
+	-- page.surface:addChild(page.btnV)
+	-- page.btnV.pressed = function (self)
+	-- 	page.tfIP.text = '192.168.191.153'
+	-- 	page.tfIP.dirty = true
+	-- end
 
-	page.btnA = UI.Button{x = 10, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'A'}
-	page.surface:addChild(page.btnA)
-	page.btnA.pressed = function (self)
-		page.tfIP.text = '192.168.191.87'
-		page.tfIP.dirty = true
-	end
+	-- page.btnA = UI.Button{x = 10, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'A'}
+	-- page.surface:addChild(page.btnA)
+	-- page.btnA.pressed = function (self)
+	-- 	page.tfIP.text = '192.168.191.87'
+	-- 	page.tfIP.dirty = true
+	-- end
 	local text, hint
 	if user.ServerType == 'Rednet' then
 		text = 'Computer ID:'
@@ -981,7 +981,7 @@ function MainMenu.new()
 		if user.ServerType == 'Rednet' then
 			ret, err = network:startServer()
 		else
-			network:startServer(port)
+			ret, err = network:startServer(port)
 		end
 		if not ret then
 			error(err)

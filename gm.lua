@@ -904,26 +904,26 @@ function JoinMenu.new()
 		Screen:switch('mainMenu')
 	end
 
-	page.btnL = UI.Button{x = page.btnExit.x + page.btnExit.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'L'}
-	page.surface:addChild(page.btnL)
-	page.btnL.pressed = function (self)
-		page.tfIP.text = 'localhost'
-		page.tfIP.dirty = true
-	end
+	-- page.btnL = UI.Button{x = page.btnExit.x + page.btnExit.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'L'}
+	-- page.surface:addChild(page.btnL)
+	-- page.btnL.pressed = function (self)
+	-- 	page.tfIP.text = 'localhost'
+	-- 	page.tfIP.dirty = true
+	-- end
 
-	page.btnV = UI.Button{x = page.btnL.x + page.btnL.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'V'}
-	page.surface:addChild(page.btnV)
-	page.btnV.pressed = function (self)
-		page.tfIP.text = '192.168.191.153'
-		page.tfIP.dirty = true
-	end
+	-- page.btnV = UI.Button{x = page.btnL.x + page.btnL.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'V'}
+	-- page.surface:addChild(page.btnV)
+	-- page.btnV.pressed = function (self)
+	-- 	page.tfIP.text = '192.168.191.153'
+	-- 	page.tfIP.dirty = true
+	-- end
 
-	page.btnA = UI.Button{x = page.btnV.x + page.btnV.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'A'}
-	page.surface:addChild(page.btnA)
-	page.btnA.pressed = function (self)
-		page.tfIP.text = '192.168.191.87'
-		page.tfIP.dirty = true
-	end
+	-- page.btnA = UI.Button{x = page.btnV.x + page.btnV.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'A'}
+	-- page.surface:addChild(page.btnA)
+	-- page.btnA.pressed = function (self)
+	-- 	page.tfIP.text = '192.168.191.87'
+	-- 	page.tfIP.dirty = true
+	-- end
 
 	local text, hint
 	if user.ServerType == 'Rednet' then
@@ -1014,7 +1014,7 @@ function MainMenu.new()
 		if user.ServerType == 'Rednet' then
 			ret, err = network:startServer()
 		else
-			network:startServer(port)
+			ret, err = network:startServer(port)
 		end
 		if not ret then
 			error(err)
