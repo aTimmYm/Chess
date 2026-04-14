@@ -43,4 +43,4 @@ Play locally or online with friends on ComputerCraft computers.
 On your Computer run:
 
 ```lua
-wget run "https://raw.githubusercontent.com/aTimmYm/Chess/refs/heads/dev/installer.lua"
+wget run "https://raw.githubusercontent.com/aTimmYm/Chess/refs/heads/main/installer.lua"

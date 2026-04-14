@@ -1,4 +1,4 @@
-local link = 'https://raw.githubusercontent.com/aTimmYm/Chess/refs/heads/dev/'
+local link = 'https://raw.githubusercontent.com/aTimmYm/Chess/refs/heads/main/'
 
 local function write_file(path, data)
 	local file = fs.open(path, 'w')
