@@ -2,23 +2,23 @@
 
 [![Lua](https://img.shields.io/badge/Language-Lua-2C2D72.svg?logo=lua)](https://www.lua.org/)
 [![CC:Tweaked](https://img.shields.io/badge/For-ComputerCraft-00A651.svg)]([https://computercraft.info/](https://tweaked.cc/))
-[![Version](https://img.shields.io/badge/Version-0.4.13-brightgreen.svg)](https://github.com/aTimmYm/Chess/tree/dev)
+[![Version](https://img.shields.io/badge/Version-1.0-brightgreen.svg)](https://github.com/aTimmYm/Chess/tree/dev)
 
-**Full-featured chess right inside Minecraft!**  
+**Full-featured chess right inside Minecraft!**
 Play locally or online with friends on ComputerCraft computers.
 
 <div style="display: flex; flex-wrap: wrap; gap: 20px; justify-content: center;">
-  
+
   <div style="text-align: center; flex: 1 1 45%; max-width: 480px;">
     <img src="screenshots/mainmenu.png" width="100%" style="border-radius: 8px;">
     <img src="screenshots/mainmenu_gm.png" width="100%" style="border-radius: 8px;">
   </div>
-  
+
   <div style="text-align: center; flex: 1 1 45%; max-width: 480px;">
     <img src="screenshots/lobby.png" width="100% "style="border-radius: 8px;">
     <img src="screenshots/lobby_gm.png" width="100%" style="border-radius: 8px;">
   </div>
-  
+
   <div style="text-align: center; flex: 1 1 45%; max-width: 480px;">
     <img src="screenshots/game.png" width="100%" style="border-radius: 8px;">
     <img src="screenshots/game_gm.png" width="100%" style="border-radius: 8px;">
