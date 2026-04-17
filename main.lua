@@ -1,4 +1,3 @@
-_G.ver = '0.4.13'
 package.path = package.path .. ";/Data/?;/Data/?.lua;/Data/?/init.lua"
 -- function _G.log(...)
 -- 	local texts = {...}
@@ -15,9 +14,19 @@ package.path = package.path .. ";/Data/?;/Data/?.lua;/Data/?/init.lua"
 -- 	file.close()
 -- end
 
-local r = read()
+-- term.setTextColor(colors.yellow)
+-- print('Print \'t\' or \'g\' to run Chess using text or graphics mode. Or just press Enter, to auto detect mode')
+-- term.setTextColor(colors.white)
+-- local r = read()
 
-if r == 'g' or r == '' and term.setGraphicsMode then
+-- if r == 'g' or r == '' and term.setGraphicsMode then
+-- 	term.setGraphicsMode(1)
+-- 	os.run(_ENV, 'GM.lua')
+-- elseif r == 't' or r == '' then
+-- 	os.run(_ENV, 'TM.lua')
+-- end
+
+if term.setGraphicsMode then
 	term.setGraphicsMode(1)
 	os.run(_ENV, 'GM.lua')
 elseif r == 't' or r == '' then

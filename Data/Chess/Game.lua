@@ -428,8 +428,8 @@ local function getSAN(self, move, promoChoice)
 
 		for _, otherMove in ipairs(self:allLegalMoves(color)) do
 			if (otherMove.fx ~= move.fx or otherMove.fy ~= move.fy)
-			   and pieceKind(otherMove.piece) == pieceType
-			   and otherMove.tx == move.tx and otherMove.ty == move.ty then
+				 and pieceKind(otherMove.piece) == pieceType
+				 and otherMove.tx == move.tx and otherMove.ty == move.ty then
 				-- Інша фігура того ж типу може піти сюди ж
 				if otherMove.fx == move.fx then
 					ambigRank = true -- На одній вертикалі, вказуємо горизонталь
@@ -459,7 +459,7 @@ local function getSAN(self, move, promoChoice)
 	return san
 end
 
-local function moveSelectedTo(self, x, y, selected)
+local function moveSelectedTo(self, x, y, selected, promo)
 	if not selected then return false end
 	local chosen
 	for _, m in ipairs(self.legalMoves) do
@@ -470,17 +470,16 @@ local function moveSelectedTo(self, x, y, selected)
 	end
 	if not chosen then return false end
 
-	local promo = chosen.promo and "q" or nil
+	if chosen.promo and not promo then
+		return 'promo'
+	end
 	local movingTeam = self.turn
 
-	-- 1. Генеруємо базовий SAN до зміни стану дошки
 	local san = self:getSAN(chosen, promo)
 
-	-- 2. Застосовуємо хід
 	local status = 'move'
 	if self:applyMove(chosen, promo) then status = 'capture' end
 
-	-- 3. Перевіряємо шах/мат (вже для наступного гравця)
 	self.legalMoves = {}
 	local movesLeft = #self:allLegalMoves(self.turn)
 	local isCheckNow = self:inCheck(self.turn)
@@ -491,10 +490,8 @@ local function moveSelectedTo(self, x, y, selected)
 		san = san .. "+"
 	end
 
-	-- 4. Записуємо чистий SAN в історію
 	self:addToHistory(san, movingTeam)
 
-	-- Оновлюємо статус гри
 	self.message = (self.turn == "w" and "White" or "Black") .. " to move."
 	if isCheckNow then
 		self.message = (self.turn == "w" and "White" or "Black") .. " to move: check."
@@ -589,15 +586,18 @@ local function parseFEN(fen)
 	s.fullmove = math.max(1, fullmove)
 	s.selected = nil
 	s.legalMoves = {}
-	s.awaitingPromotion = false
 	s.pendingPromotion = nil
 	s.over = false
 	s.result = nil
+	s.history = {}
 
 	return s
 end
 
 local function loadFEN(self, fen)
+	self.enPassant = nil
+	self.over = false
+	self.result = nil
 	local parsed, err = parseFEN(fen)
 	if not parsed then
 		return nil, err
@@ -617,8 +617,7 @@ local function loadFEN(self, fen)
 	else
 		self.message = ((self.turn == "w") and "White" or "Black") .. " to move."
 	end
-	-- refreshStatus()
-	-- if board then board.dirty = true end
+	self:refreshStatus()
 	return true
 end
 
@@ -635,6 +634,36 @@ local function gameOver(self, message)
 	self:overed()
 end
 
+local piecePrice = {
+	k = 0,
+	p = 1,
+	n = 3,
+	b = 3,
+	r = 5,
+	q = 11,
+}
+
+local function getMaterial(self)
+	local white = 0
+	local black = 0
+	local b = self.board
+	for y = 1, 8 do
+		local line = b[y]
+		for x = 1, 8 do
+			local p = line[x]
+			if p then
+				if p:sub(1, 1) == 'w' then
+					white = white + piecePrice[p:sub(2,2)]
+				else
+					black = black + piecePrice[p:sub(2,2)]
+				end
+			end
+		end
+	end
+	return white, black
+end
+
+
 function _Game.Game(board)
 	return {
 		board = board,
@@ -650,7 +679,6 @@ function _Game.Game(board)
 		result = nil,
 		message = "White to move.",
 
-		-- cloneState = cloneState,
 		squareAttacked = squareAttacked,
 		findKing = findKing,
 		setDefaultPieces = setDefaultPieces,
@@ -667,6 +695,7 @@ function _Game.Game(board)
 		refreshStatus = refreshStatus,
 		gameOver = gameOver,
 		getSAN = getSAN,
+		getMaterial = getMaterial,
 	}
 end
 

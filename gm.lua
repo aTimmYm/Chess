@@ -1,4 +1,3 @@
-term.setGraphicsMode(1)
 local UI = require "UIGM"
 local font = require "Font"
 local speaker = require "Speaker"
@@ -146,6 +145,7 @@ Chess.BOARD_H = Chess.T_DELTA_H * 2 + 8 * Chess.CELL_H
 BOARD_BG[user.ColorScheme]()
 
 local root = UI.Root()
+root.version = '1.0'
 Screen.surface = root
 
 local sounds = {
@@ -164,6 +164,29 @@ local exeption = {
 	['Data/user.json'] = true
 }
 
+local function notification(msg)
+	-- box = UI.Box{x = 0, y = 15, w = 80, h = 25, bc = colors.green, fc = colors.white, radius = 2}
+	-- root:addChild(box)
+	local box = UI.Label{x = -1, y = 5, w = 80, h = 22, bc = colors.red, fc = colors.white, radius = 2, text = msg}
+	box.onMouseDown = function (self)
+		self.root:removeChild(self)
+		self.root:onLayout()
+		os.cancelTimer(self.timer)
+	end
+	root:addChild(box)
+	root:onLayout()
+	local boxOnEvent = box.onEvent
+	box.onEvent = function (self, evt)
+		if evt[1] == 'timer' and evt[2] == self.timer then
+			self.root:removeChild(self)
+			self.root:onLayout()
+			return true
+		end
+		return boxOnEvent(self, evt)
+	end
+	box.timer = os.startTimer(3)
+end
+
 local function write_file(path, data)
 	local file = fs.open(path, 'w')
 	file.write(data)
@@ -172,15 +195,17 @@ end
 
 local function listAllFiles(path, array)
 	local files = fs.list(path)
-	
+
 	for _, file in ipairs(files) do
 		local fullPath = fs.combine(path, file)
-		
+
 		if fs.isDir(fullPath) then
 			if not exeption[fullPath] then listAllFiles(fullPath, array) end
 		else
 			if not exeption[fullPath] then
 				local file = fs.open(fullPath, 'r')
+				-- local hash = sha.digest(file.readAll())
+				-- array[fullPath] = util.toHex(hash)
 				array[fullPath] = sha.sha256(file.readAll())
 				file.close()
 				-- log(fullPath)
@@ -208,7 +233,6 @@ local function checkUpdates(shaSum)
 	end
 	for path, hash in pairs(userList) do
 		if not hashList[path] then
-			-- log('deletE:' .. path)
 			fs.delete(path)
 			ret = true
 		end
@@ -236,7 +260,7 @@ function SettingsMenu.new()
 		Screen:closeModal()
 	end
 
-	page.labelSettings = UI.Label{x = math.floor((root.w - font.calcWidth(LC.settings))/2) + 1, y = 5, w = font.calcWidth(LC.settings), h = 8, text = font.upper(LC.settings), bc = page.surface.bc, fc = colors.white}
+	page.labelSettings = UI.Label{x = math.floor((root.w - font.calcWidth(font.upper(LC.settings)))/2) + 1, y = 5, w = font.calcWidth(font.upper(LC.settings)), h = 10, text = font.upper(LC.settings), bc = page.surface.bc, fc = colors.white}
 	page.surface:addChild(page.labelSettings)
 
 	page.scrollBox = UI.ScrollBox{x = 0, y = 20, w = root.w - 4, h = root.h - 20, bc = page.surface.bc, fc = colors.white}
@@ -281,20 +305,25 @@ function SettingsMenu.new()
 	page.scrollBox:addChild(page.dropdownScheme)
 	page.dropdownScheme.pressed = function (self, element)
 		BOARD_BG[element]()
+		Chess.cacheGlyphs(Chess.BOARD_FG_A, Chess.BOARD_FG_B)
 		user.ColorScheme = element
+		local cS = Screen:getCurrent()
+		if cS and cS.boardUI then
+			cS.boardUI.cachedBG = nil
+		end
 	end
 
 	page.boxColor = UI.Box{x = page.dropdownScheme.x + page.dropdownScheme.w + 50, y = page.labelScheme.y, w = 42, h = 28, bc = colors.red}
 	page.scrollBox:addChild(page.boxColor)
 	page.boxColor.draw = function (self)
-		local glyph = {'p', 'q', 'n', 'b', 'k', 'r'}
+		local glyph = {'wp', 'wq', 'wn', 'bb', 'bk', 'br'}
 		local count = 1
 		for y = 0, 1 do
 			for x = 0, 2 do
 				local bc = ((x + y) % 2 == 0) and Chess.BOARD_BG_A or Chess.BOARD_BG_B
 				local dX, dY = self.x + x * 14, self.y + y * 14
 				term.drawPixels(dX, dY, bc, 14, 14)
-				Chess.drawPiece(dX, dY, Chess.pieceGlyph[glyph[count]], y == 0 and Chess.BOARD_FG_A or Chess.BOARD_FG_B)
+				Chess.drawPiece(dX, dY, Chess.cacheGlyph[glyph[count]], Chess.CELL_W, Chess.CELL_H)
 				count = count + 1
 			end
 		end
@@ -309,11 +338,12 @@ function SettingsMenu.new()
 		LC = localization[element]
 		user.Language = element
 	end
+
 	if http then
-		page.labelNetwork = UI.Label{x = page.labelInterface.x, y = page.labelLanguage.y + page.labelLanguage.h + 10, w = font.calcWidth('Network'), h = 10, bc = page.scrollBox.bc, fc = colors.white, text = 'Network'}
+		page.labelNetwork = UI.Label{x = page.labelInterface.x, y = page.labelLanguage.y + page.labelLanguage.h + 10, w = font.calcWidth(LC.network), h = 10, bc = page.scrollBox.bc, fc = colors.white, text = LC.network}
 		page.scrollBox:addChild(page.labelNetwork)
 
-		page.labelServerType = UI.Label{x = page.labelInterface.x, y = page.labelNetwork.y + page.labelNetwork.h + 5, w = font.calcWidth('Connection Type'), h = 10, bc = page.scrollBox.bc, fc = colors.lightGray, text = 'Connection Type'}
+		page.labelServerType = UI.Label{x = page.labelInterface.x, y = page.labelNetwork.y + page.labelNetwork.h + 5, w = font.calcWidth(LC.connection_type), h = 10, bc = page.scrollBox.bc, fc = colors.lightGray, text = LC.connection_type}
 		page.scrollBox:addChild(page.labelServerType)
 
 		local arr = http.websocketServer and {'Rednet','WebSocket'} or {'Rednet'}
@@ -351,9 +381,41 @@ function AboutMenu.new()
 		Screen:closeModal()
 	end
 
+	page.scrollBox = UI.ScrollBox{x = 0, y = page.btnExit.y + page.btnExit.h + 5, w = page.surface.w - 5, h = page.surface.h - (page.btnExit.y + page.btnExit.h + 5), bc = colors.black, fc = colors.white}
+	page.surface:addChild(page.scrollBox)
+
+	local scrollbar = UI.Scrollbar(page.scrollBox)
+	page.surface:addChild(scrollbar)
+
+	--==TEXT ABOUT==--
+	local x, Height, w = 10, 0, page.scrollBox.w - 20
+	for i = 1, 5 do
+		local t = LC['about_textBlock'..i]
+		local h = (#(UI.wrap_text_to_width(t, w))) * font.charHeight
+		local l = UI.Label{text = t,x = x, y = Height, w = w, h = h, bc = page.scrollBox.bc, fc = page.scrollBox.fc, align = 'lefttop'}
+		page.scrollBox:addChild(l)
+		Height = l.y + l.h
+	end
+
+	page.scrollBox.onResize = function (width, height)
+		local Height, w = 0, width - 20
+		for i, child in ipairs(page.scrollBox.children) do
+			local t = LC['about_textBlock'..i]
+			local h = (#(UI.wrap_text_to_width(t, w))) * font.charHeight
+			child.w = w
+			child.h = h
+			child.local_y = Height
+			Height = child.local_y + child.h
+			child._layout_dirty = true
+		end
+	end
+
 	page.surface.onResize = function (width, height)
 		page.surface.w, page.surface.h = width, height
 		page.labelAbout.local_x = math.floor((root.w - font.calcWidth(LC.about))/2) + 1
+		page.scrollBox.w, page.scrollBox.h = page.surface.w - 5, page.surface.h - (page.btnExit.y + page.btnExit.h + 5)
+		scrollbar.local_x, scrollbar.h = page.scrollBox.x + page.scrollBox.w, page.scrollBox.h
+		page.scrollBox.onResize(page.scrollBox.w, page.scrollBox.h)
 	end
 
 	return page
@@ -369,7 +431,7 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 
 	page.boardUI = Chess.Board{ x = math.floor((root.w - 91 - Chess.BOARD_W)/2) + 1, y = math.floor((root.h - Chess.BOARD_H)/2) + 1, w = Chess.BOARD_W, h = Chess.BOARD_H, bc = colors.black, fc = colors.lightGray, bc_alt = colors.orange }
 	page.surface:addChild(page.boardUI)
-	page.boardUI.pressed = function (self, from, to)
+	page.boardUI.pressed = function (self, from, to, promo)
 		page.list:onMouseScroll(math.max(0, #page.list.array * 10 - page.list.h))
 		page.list.dirty = true
 		if not self.game.over and time then
@@ -384,7 +446,7 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 			end
 		end
 		if not network.running then return end
-		local message = {type = 'chess_move', from = from, to = to}
+		local message = {type = 'chess_move', from = from, to = to, promo = promo}
 		if network.server and time then
 			message.remainig_w = page.timerW:getRemainingMs()
 			message.remainig_b = page.timerB:getRemainingMs()
@@ -404,8 +466,73 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 	page.game.playSound = function (self, status)
 		speaker.playFile(sounds[status])
 	end
+	page.boardUI.waitingPromo = function(self, toX, toY, selected)
+		if page.game.pendingPromotion then return end
+		page.game.pendingPromotion = true
+		if page.tfFEN then
+			page.tfFEN:setDisabled(true)
+			page.btnFEN:setDisabled(true)
+		end
+		if page.btnRestart then
+			page.btnRestart:setDisabled(true)
+		else
+			page.btnResign:setDisabled(true)
+			page.btnOfferdraw:setDisabled(true)
+		end
+
+		local box = UI.Box{ x = -1, y = 5, w = 106, h = 23, radius = 2, bc = colors.green}
+		root:addChild(box)
+		local label = UI.Label{text = 'Choose promotion', x = 2, y = 0, w = box.w - 2, h = box.h, radius = 2, bc = box.bc, fc = colors.white, align = 'left_top'}
+		box:addChild(label)
+		local btnClose = UI.Button{x = box.w - 7, y = 0, w = 6, h = 9, bc = box.bc, fc = colors.gray, text = 'x', bc_cl = box.bc, fc_cl = colors.lightGray}
+		box:addChild(btnClose)
+		btnClose.pressed = function (self)
+			page.game.pendingPromotion = nil
+			page.boardUI.selected = nil
+			page.boardUI.dirty = true
+			self.root:removeChild(box)
+			self.root:onLayout()
+			if page.tfFEN then
+				page.tfFEN:setDisabled()
+				page.btnFEN:setDisabled()
+			end
+			if page.btnRestart then
+				page.btnRestart:setDisabled()
+			else
+				page.btnResign:setDisabled()
+				page.btnOfferdraw:setDisabled()
+			end
+		end
+		local ddChoose = UI.Dropdown{x = 2, y = box.h - 11, w = 42, h = 10, radius = 2, bc = colors.gray, fc = colors.white, array = {'Queen', 'Bishop', 'Rook', 'Knight'}}
+		box:addChild(ddChoose)
+		root:onLayout()
+		ddChoose.pressed = function (ddSelf, choice)
+			choice = (choice == 'Knight') and choice:sub(2,2):lower() or choice:sub(1,1):lower()
+			if page.game:moveSelectedTo(toX, toY, selected, choice) then
+				page.boardUI.selected = nil
+				page.boardUI.dirty = true
+				page.boardUI:pressed(selected.x * 10 + selected.y, toX * 10 + toY, choice)
+			end
+			self.root:removeChild(box)
+			self.root:onLayout()
+			if page.tfFEN then
+				page.tfFEN:setDisabled()
+				page.btnFEN:setDisabled()
+			end
+			if page.btnRestart then
+				page.btnRestart:setDisabled()
+			else
+				page.btnResign:setDisabled()
+				page.btnOfferdraw:setDisabled()
+			end
+			page.game.pendingPromotion = nil
+		end
+	end
 	page.game.refreshStatus = function(self)
 		page.labelMessage:setText(self.message)
+		local mW, mB = self:getMaterial()
+		page.labelMaterialW:setText(tostring(mW-mB))
+		page.labelMaterialB:setText(tostring(mB-mW))
 	end
 	page.game.overed = function(self)
 		page.timerB:pause()
@@ -467,6 +594,8 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 		--timers
 		page.timerW.local_y = page.boardUI.rotate and page.boxPanel.y + page.boxPanel.h + 1 or page.boxPanel.y - 11
 		page.timerB.local_y = page.boardUI.rotate and page.boxPanel.y - 11 or page.boxPanel.y + page.boxPanel.h + 1
+		page.labelMaterialW.local_y = page.timerW.local_y
+		page.labelMaterialB.local_y = page.timerB.local_y
 
 		page.surface:onLayout()
 	end
@@ -505,7 +634,7 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 			end
 		end
 	else
-		page.btnRestart = UI.Button{x = root.w - 65, y = page.btnRotate.y, w = 65, h = 10, radius = 5, bc = colors.gray, fc = colors.white, text = LC.restart, align = "center"}
+		page.btnRestart = UI.Button{x = root.w - 70, y = page.btnRotate.y, w = 65, h = 10, radius = 5, bc = colors.gray, fc = colors.white, text = LC.restart, align = "center"}
 		page.surface:addChild(page.btnRestart)
 		page.btnRestart.pressed = function (self)
 			page.game:restartGame()
@@ -549,6 +678,14 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 		page.game:gameOver('Black out of time')
 	end
 
+	local mW, mB = page.game:getMaterial()
+
+	page.labelMaterialW = UI.Label{text = tostring(mW - mB), x = root.w - 24, y = page.timerW.y, w = 24, h = 10, bc = page.surface.bc, fc = colors.gray, align = 'right'}
+	page.surface:addChild(page.labelMaterialW)
+
+	page.labelMaterialB = UI.Label{text = tostring(mB - mW), x = root.w - 24, y = page.timerB.y, w = 24, h = 10, bc = page.surface.bc, fc = colors.gray, align = 'right'}
+	page.surface:addChild(page.labelMaterialB)
+
 	if not network.running then
 		page.tfFEN = UI.Textfield{x = 5, y = page.surface.h - 15, w = root.w - 25, h = 10, radius = 2, hint = "Type FEN", fc = colors.white, bc = colors.gray}
 		page.surface:addChild(page.tfFEN)
@@ -556,14 +693,19 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 		page.btnFEN = UI.Button{x = root.w - 15, y = page.tfFEN.y, w = 10, h = 10, text = ">", radius = 10, fc = colors.white, bc = colors.gray}
 		page.surface:addChild(page.btnFEN)
 		page.btnFEN.pressed = function (self)
-			if page.tfFEN.text then
+			if page.tfFEN.text ~= '' then
 				page.game:loadFEN(page.tfFEN.text)
+				page.list:updateArr(page.game.history)
 				page.boardUI.dirty = true
+				page.timerB:setTime(time)
+				page.timerB:pause()
+				page.timerW:setTime(time)
+				page.timerW:pause()
 			end
 		end
 	end
 
-	page.moveFromTo = function (from, to)
+	page.moveFromTo = function (from, to, promo)
 		local fx = math.floor(from / 10)
 		local fy = from % 10
 
@@ -571,7 +713,7 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 		local ty = to % 10
 
 		page.boardUI:selectSquare(fx, fy)
-		page.game:moveSelectedTo(tx, ty, page.boardUI.selected)
+		page.game:moveSelectedTo(tx, ty, page.boardUI.selected, promo)
 		page.boardUI.selected = nil
 		page.list:onMouseScroll(math.max(0, #page.list.array * 10 - page.list.h))
 		page.list.dirty = true
@@ -600,7 +742,7 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 		if not network.running then
 			page.tfFEN.local_y, page.tfFEN.w = height - 15, width- 25
 			page.btnFEN.local_x, page.btnFEN.local_y = width - 15, page.tfFEN.local_y
-			page.btnRestart.local_x = width - 65
+			page.btnRestart.local_x = width - 70
 		else
 			page.btnResign.local_x = width - 35
 			page.btnOfferdraw.local_x = page.btnResign.local_x - 35
@@ -608,6 +750,8 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 		page.labelMessage.w = width - 133
 		page.timerW.local_x, page.timerW.local_y = page.boxPanel.local_x, page.boardUI.rotate and page.boxPanel.local_y + page.boxPanel.h + 1 or page.boxPanel.local_y - 11
 		page.timerB.local_x, page.timerB.local_y = page.boxPanel.local_x, page.boardUI.rotate and page.boxPanel.local_y - 11 or page.boxPanel.local_y + page.boxPanel.h + 1
+		page.labelMaterialW.local_x, page.labelMaterialW.local_y = width - 24, page.timerW.local_y
+		page.labelMaterialB.local_x, page.labelMaterialB.local_y = width - 24, page.timerB.local_y
 		if page.labelOfferdraw then
 			page.labelOfferdraw.local_x, page.labelOfferdraw.local_y = math.floor((width - 25)/2) + 1, height - 15
 			page.btnYes.local_x, page.btnYes.local_y = page.labelOfferdraw.local_x + page.labelOfferdraw.w + 5, page.labelOfferdraw.local_y
@@ -630,7 +774,7 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 				page.timerW:setTime(recieve.remainig_w / 1000)
 				page.timerB:setTime(recieve.remainig_b / 1000)
 			elseif Type == 'chess_move' then
-				page.moveFromTo(recieve.from, recieve.to)
+				page.moveFromTo(recieve.from, recieve.to, recieve.promo)
 				if not recieve.remainig_w and time then
 					network:broadcast({type = 'sync', remainig_w = page.timerW:getRemainingMs(), remainig_b = page.timerB:getRemainingMs()})
 				elseif time then
@@ -658,6 +802,7 @@ function StartGame.new(self, team, FEN, time, nickname, increment)
 					page.labelOfferdraw = nil
 					page.btnNo = nil
 					page.btnYes = nil
+					if page.game.over then return end
 					page.game:gameOver('Draw.')
 					local message = {type = 'game_offerdraw', message = 'Yes'}
 					if network.server then network:broadcast(message)
@@ -734,7 +879,6 @@ function LobbyMenu.new()
 	page.rbtnTeam = UI.RadioButton{x = root.w - 55, y = page.labelLobby.y + page.labelLobby.h + 5, w = font.calcWidth(LC.black) + 5, h = 16, bc = page.surface.bc, fc = colors.white, text = {LC.white, LC.black}}
 	page.surface:addChild(page.rbtnTeam)
 	page.rbtnTeam.pressed = function (self, i)
-		if page.btnReady.ready then return end
 		page.labelPlayer1.dirty = true
 		page.labelPlayer1.team = (i == LC.white) and 'w' or 'b'
 		local message = {type = 'lobby_update', ready = page.btnReady.ready, team = page.labelPlayer1.team, nickname = user.Nickname}
@@ -763,7 +907,7 @@ function LobbyMenu.new()
 
 	-- local y = network.server and page.btnExit.y + page.btnExit.h + 15 or page.btnExit.y + page.btnExit.h + 15 + 20 + 5
 
-	page.labelPlayer1 = UI.Label{x = page.btnExit.x + page.btnExit.w + 5, y = page.btnExit.y + page.btnExit.h + 15, w = 75, h = 20, radius = 2, text = ' '..user.Nickname, bc = colors.gray, fc = colors.white, align = "left"}
+	page.labelPlayer1 = UI.Label{x = page.btnExit.x + page.btnExit.w + 5, y = page.btnExit.y + page.btnExit.h + 15, w = 75, h = 20, radius = 2, text = user.Nickname, bc = colors.gray, fc = colors.white, align = "center"}
 	page.labelPlayer1.team = 'w'
 	page.labelPlayer1.ready = false
 	local player1Draw = page.labelPlayer1.draw
@@ -771,7 +915,7 @@ function LobbyMenu.new()
 		self.bc = self.ready and colors.green or colors.gray
 		player1Draw(self)
 		local fc = (self.team == 'w') and colors.white or colors.black
-		font.simpleText('•', self.x + 2, self.y, fc, self.w, self.h, self.align)
+		font.simpleText('•', self.x + 2, self.y, fc, self.w, self.h, 'left')
 	end
 	page.surface:addChild(page.labelPlayer1)
 
@@ -782,10 +926,14 @@ function LobbyMenu.new()
 		if page.labelPlayer1.ready then
 			page.rbtnTeam:setDisabled(true)
 			page.dropdownTime:setDisabled(true)
+			if page.tfCustom then page.tfCustom:setDisabled(true) end
+			if page.tfFEN then page.tfFEN:setDisabled(true) end
 			self:setText(LC.not_ready)
 		else
 			page.rbtnTeam:setDisabled()
 			if network.server then
+				if page.tfCustom then page.tfCustom:setDisabled() end
+				if page.tfFEN then page.tfFEN:setDisabled(true) end
 				page.dropdownTime:setDisabled()
 			end
 			self:setText(LC.ready)
@@ -848,7 +996,7 @@ function LobbyMenu.new()
 	function page.createUI(recieve)
 		local bc = recieve.ready and colors.green or colors.gray
 
-		page.labelPlayer2 = UI.Label{x = page.btnExit.x + page.btnExit.w + 5, y = page.labelPlayer1.y + page.labelPlayer1.h + 5, w = 75, h = 20, radius = 2, text = ' '..recieve.nickname, bc = bc, fc = colors.white, align = "left"}
+		page.labelPlayer2 = UI.Label{x = page.btnExit.x + page.btnExit.w + 5, y = page.labelPlayer1.y + page.labelPlayer1.h + 5, w = 75, h = 20, radius = 2, text = recieve.nickname, bc = bc, fc = colors.white, align = "center"}
 		page.labelPlayer2.team = recieve.team
 		page.labelPlayer2.draw = page.labelPlayer1.draw
 		page.surface:addChild(page.labelPlayer2)
@@ -872,7 +1020,7 @@ function LobbyMenu.new()
 
 		if Type == 'lobby_join' then
 			if not page.labelPlayer2 then page.createUI(recieve) end
-			network:broadcast({type = 'lobby_update', nickname = user.Nickname, ready = page.labelPlayer1.ready, team = page.labelPlayer2.team, time = page.dropdownTime.item_index})
+			network:broadcast({type = 'lobby_update', nickname = user.Nickname, ready = page.labelPlayer1.ready, team = page.labelPlayer1.team, time = page.dropdownTime.item_index})
 		elseif Type == 'lobby_update' then
 			if not page.labelPlayer2 then page.createUI(recieve) end
 			page.labelPlayer2.ready = recieve.ready
@@ -904,30 +1052,30 @@ function JoinMenu.new()
 		Screen:switch('mainMenu')
 	end
 
-	-- page.btnL = UI.Button{x = page.btnExit.x + page.btnExit.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'L'}
-	-- page.surface:addChild(page.btnL)
-	-- page.btnL.pressed = function (self)
-	-- 	page.tfIP.text = 'localhost'
-	-- 	page.tfIP.dirty = true
-	-- end
+	page.btnL = UI.Button{x = page.btnExit.x + page.btnExit.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'L'}
+	page.surface:addChild(page.btnL)
+	page.btnL.pressed = function (self)
+		page.tfIP.text = 'localhost'
+		page.tfIP.dirty = true
+	end
 
-	-- page.btnV = UI.Button{x = page.btnL.x + page.btnL.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'V'}
-	-- page.surface:addChild(page.btnV)
-	-- page.btnV.pressed = function (self)
-	-- 	page.tfIP.text = '192.168.191.153'
-	-- 	page.tfIP.dirty = true
-	-- end
+	page.btnV = UI.Button{x = page.btnL.x + page.btnL.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'V'}
+	page.surface:addChild(page.btnV)
+	page.btnV.pressed = function (self)
+		page.tfIP.text = '192.168.191.153'
+		page.tfIP.dirty = true
+	end
 
-	-- page.btnA = UI.Button{x = page.btnV.x + page.btnV.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'A'}
-	-- page.surface:addChild(page.btnA)
-	-- page.btnA.pressed = function (self)
-	-- 	page.tfIP.text = '192.168.191.87'
-	-- 	page.tfIP.dirty = true
-	-- end
+	page.btnA = UI.Button{x = page.btnV.x + page.btnV.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'A'}
+	page.surface:addChild(page.btnA)
+	page.btnA.pressed = function (self)
+		page.tfIP.text = '192.168.191.87'
+		page.tfIP.dirty = true
+	end
 
 	local text, hint
 	if user.ServerType == 'Rednet' then
-		text = 'Computer ID:'
+		text = LC.computer_id..':'
 		hint = '9'
 	else
 		text = LC.ip_adress..':'
@@ -1017,7 +1165,8 @@ function MainMenu.new()
 			ret, err = network:startServer(port)
 		end
 		if not ret then
-			error(err)
+			notification(err)
+			return
 		end
 		Screen:switch('lobbyMenu')
 	end
@@ -1031,7 +1180,7 @@ function MainMenu.new()
 	page.btnLocalGame = UI.Button{x = center, y = page.btnJoin.y + page.btnJoin.h + 5, w = calcWidth, h = 10, radius = 5, bc = colors.gray, fc = colors.white, bc_hv = colors.lightGray, fc_hv = colors.black, text = LC.local_game, bc_hc = colors.lightGray, fc_hc = colors.black}
 	page.surface:addChild(page.btnLocalGame)
 	page.btnLocalGame.pressed = function (self)
-		Screen:switch('startGame', 'w', '', 600, _, 2)
+		Screen:switch('startGame', 'w', '')
 	end
 
 	page.btnSettings = UI.Button{x = center, y = page.btnLocalGame.y + page.btnLocalGame.h + 5, w = calcWidth, h = 10, radius = 5, bc = colors.gray, fc = colors.white, bc_hv = colors.lightGray, fc_hv = colors.black, text = LC.settings, bc_hc = colors.lightGray, fc_hc = colors.black}
@@ -1051,17 +1200,10 @@ function MainMenu.new()
 	page.btnAbout.pressed = function (self)
 		Screen:openModal('aboutMenu')
 	end
-	-- local ABC =
-	-- "ABCDEFGHIJKLMNOPQRSTUVWXYZ" ..
-	-- "abcdefghijklmnopqrstuvwxyz" ..
-	-- "АБВГДЕЄЖЗИІЇЁЙКЛМНОПРСТУФХЦЧШЩЬЪЭЮЯ" ..
-	-- "абвгдеєжзиіїёйклмнопрстуфхцчшщьъэюя" ..
-	-- "0123456789" ..
-	-- ".,!?-+*/()[]{}:;\"' "
-	page.labelVersion = UI.Label{x = 0, y = root.h - 20, w = root.w, h = 10, bc = page.surface.bc, fc = colors.gray, text = 'Ver.: ' .. _G.ver, align = "left"}
-	-- local Version_Label = UI.Label{x = 0, y = root.h - 9, w = root.w, h = 9, bc = surface.bc, fc = colors.gray, text = ABC, align = "left"}
+
+	page.labelVersion = UI.Label{x = 0, y = root.h - 20, w = root.w, h = 10, bc = page.surface.bc, fc = colors.gray, text = 'Ver.: ' .. root.version, align = "left"}
 	page.surface:addChild(page.labelVersion)
-	page.btnUpdate = UI.Button{x = 0, y = root.h - 10, w = font.calcWidth('Check for update') + 10, h = 10, radius = 5, text = 'Check for update', bc = colors.gray, fc = colors.white}
+	page.btnUpdate = UI.Button{x = 0, y = root.h - 10, w = font.calcWidth(LC.check_for_update) + 10, h = 10, radius = 5, text = LC.check_for_update, bc = colors.gray, fc = colors.white}
 	page.btnUpdate.loading = 0
 	page.btnUpdate.draw = function (self)
 		local bc = self.bc
@@ -1087,26 +1229,24 @@ function MainMenu.new()
 	page.btnUpdate.pressed = function (self)
 		local link = 'https://raw.githubusercontent.com/aTimmYm/Chess/refs/heads/dev/'
 		local response, err = http.get(link .. 'sha256-sums')
-		-- local response, err = fs.open('sha256-sums', 'r')
 		if response then
 			local shaSum = response.readAll()
 			response.close()
 			local ret, filesToUpdate = checkUpdates(shaSum)
 			if ret then
-				self:setText('Updating')
+				self:setText(LC.updating)
 				for i, path in ipairs(filesToUpdate) do
 					local request = http.get(link .. path)
 					if request then
-						-- log('Download: ' .. path)
 						write_file(path, request.readAll())
 						request.close()
 						self.loading = i / #filesToUpdate
 						self:draw()
 					end
 				end
-				self:setText('Succes')
+				self:setText(LC.succes)
 			else
-				self:setText('No updates')
+				self:setText(LC.no_updates)
 			end
 		end
 	end
@@ -1137,17 +1277,16 @@ while true do
 	local event = evt[1]
 	if event == "terminate" then
 		network:stopServer()
-		term.setGraphicsMode(false)
-		term.setBackgroundColor(colors.black)
-		term.setTextColor(colors.white)
-		term.setCursorPos(1,1)
 		term.clear()
+		term.setGraphicsMode(false)
 		break
 	elseif event == "rednet_message" or event:match("^websocket") then
 		network:eventHandler(evt)
-	elseif event == 'peripheral' then
+	elseif event == 'peripheral' or event == 'peripheral_detach' then
 		speaker:updateOutputs()
 		network:updateModems()
 	end
+	-- term.setFrozen(true)
 	root:onEvent(evt)
+	-- term.setFrozen(false)
 end

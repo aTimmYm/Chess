@@ -37,8 +37,8 @@ function _speaker.setVolume(vol)
 end
 
 function _speaker.playFile(path)
-	if not fs.exists(path) then error('Wrong path') end
 	if not speaker then return end
+	if not fs.exists(path) then error('Wrong path') end
 	musicFile = fs.open(path, "rb")
 	local buffer = decoder(musicFile.read(16 * 1024))
 	speaker.playAudio(buffer, volume)

@@ -37,7 +37,14 @@ local EVENTS = {
 local expect = require "cc.expect".expect
 local font = require "Font"
 local g = require "geometry"
-local c = require "cfunc"
+
+local function getMaxListW(array)
+	local max = 0
+	for _, v in pairs(array) do
+		max = _max(max, #v)
+	end
+	return max
+end
 
 local ScrollableMixin = {}
 
@@ -281,7 +288,7 @@ end
 
 local function Container_redraw(self)
 	redraw(self)
-	for _, child in pairs(self.children) do
+	for _, child in ipairs(self.children) do
 		child:redraw()
 	end
 end
@@ -300,7 +307,7 @@ local function Container_onEvent(self, evt)
 			end
 		end
 	elseif not EVENTS.FOCUS[event] then
-		for _, child in pairs(self.children) do
+		for _, child in ipairs(self.children) do
 			if child:onEvent(evt) then
 				return true
 			end
@@ -529,7 +536,7 @@ local function ScrollBox_redraw(self)
 	if self.dirty then self:draw(); self.dirty = false end
 	local old = UI.term_setClip(self.x, self.y, self.w, self.h)
 
-	for _,child in pairs(self.visibleChild) do
+	for _,child in ipairs(self.visibleChild) do
 		child:redraw()
 	end
 
@@ -540,7 +547,7 @@ local function ScrollBox_onLayout(self)
 	self.visibleChild = {}
 	self.dirty = true
 	Container_onLayout(self)
-	for _, child in pairs(self.children) do
+	for _, child in ipairs(self.children) do
 		child.y = child.y - self.scroll.pos_y
 		child.x = child.x - self.scroll.pos_x
 		self.scroll.max_y = _max(_max(self.scroll.max_y, child.local_y + child.h) - self.h, 0)
@@ -811,7 +818,7 @@ function UI.RadioButton(args)
 			instance.text[i] = ""
 		end
 	end
-	local t = c.findMaxLenStrOfArray(instance.text)
+	-- local t = getMaxListW(instance.text)
 	-- instance.w = t == 0 and 1 or t + 2
 	-- instance.h = instance.count
 
@@ -822,22 +829,218 @@ function UI.RadioButton(args)
 	return instance
 end
 
-local function Label_draw(self, bg_override, txtcol_override)
-	local offset = 0
-	if self.radius then
-		offset = self.radius
-		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
-	else
-		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
-	end
-	if self.bold then
-		font.boldAlignedText(self.text, self.x + offset, self.y, self.fc)
-	else
-		font.simpleText(self.text, self.x + offset, self.y, self.fc, self.w, self.h, self.align)
+local function utf8_chars(str)
+	local i, n = 1, #str
+	return function()
+		if i > n then return nil end
+		local c = utf8.char(utf8.codepoint(str, i))
+		i = i + #c
+		return c
 	end
 end
 
+local function split_paragraphs(text)
+	local paragraphs = {}
+	local start = 1
+	while true do
+		local pos = text:find("\n", start, true)
+		if not pos then
+			paragraphs[#paragraphs + 1] = text:sub(start)
+			break
+		end
+		paragraphs[#paragraphs + 1] = text:sub(start, pos - 1)
+		start = pos + 1
+	end
+	return paragraphs
+end
+
+local function split_words(str)
+	local words = {}
+	for w in str:gmatch("%S+") do
+		words[#words + 1] = w
+	end
+	return words
+end
+
+local function push_wrapped_word(out_lines, word, max_w, bold, scale)
+	local current = ""
+	for ch in utf8_chars(word) do
+		local candidate = current .. ch
+		if current == "" or font.calcWidth(candidate, bold, scale) <= max_w then
+			current = candidate
+		else
+			if current ~= "" then
+				out_lines[#out_lines + 1] = current
+			end
+			current = ch
+		end
+	end
+	if current ~= "" then
+		out_lines[#out_lines + 1] = current
+	end
+end
+
+local function wrap_text_to_width(text, max_w, bold, scale)
+	local lines = {}
+
+	for _, para in ipairs(split_paragraphs(text or "")) do
+		if para == "" then
+			lines[#lines + 1] = ""
+		else
+			local words = split_words(para)
+
+			if #words == 0 then
+				lines[#lines + 1] = ""
+			else
+				local current = ""
+
+				for _, word in ipairs(words) do
+					local word_w = font.calcWidth(word, bold, scale)
+
+					if word_w > max_w then
+						if current ~= "" then
+							lines[#lines + 1] = current
+							current = ""
+						end
+						push_wrapped_word(lines, word, max_w, bold, scale)
+					else
+						local candidate = (current == "") and word or (current .. " " .. word)
+						if font.calcWidth(candidate, bold, scale) <= max_w then
+							current = candidate
+						else
+							if current ~= "" then
+								lines[#lines + 1] = current
+							end
+							current = word
+						end
+					end
+				end
+
+				if current ~= "" then
+					lines[#lines + 1] = current
+				end
+			end
+		end
+	end
+
+	if #lines == 0 then
+		lines[1] = ""
+	end
+
+	return lines
+end
+
+UI.wrap_text_to_width = wrap_text_to_width -- :)
+
+local function parse_align(align)
+	align = align or "center"
+
+	local h = "center"
+	local v = "center"
+
+	if align:find("left", 1, true) then
+		h = "left"
+	elseif align:find("right", 1, true) then
+		h = "right"
+	end
+
+	if align:find("top", 1, true) then
+		v = "top"
+	elseif align:find("bot", 1, true) or align:find("bottom", 1, true) then
+		v = "bottom"
+	end
+
+	return h, v
+end
+
+local function Label_rebuildLayout(self)
+	local scale = self.scale or 1
+	local bold = self.bold == true
+	local line_gap = self.line_gap or 0
+
+	local lines = wrap_text_to_width(self.text or "", self.w, bold, scale)
+	local widths = {}
+
+	for i = 1, #lines do
+		widths[i] = font.calcWidth(lines[i], bold, scale)
+	end
+
+	self._layout_cache = {
+		lines = lines,
+		widths = widths,
+		num_lines = #lines,
+		line_h = font.charHeight * scale,
+		block_h = #lines * (font.charHeight * scale) + math.max(0, #lines - 1) * line_gap,
+		h_align = select(1, parse_align(self.align)),
+		v_align = select(2, parse_align(self.align)),
+		scale = scale,
+		bold = bold,
+		line_gap = line_gap,
+	}
+	self._layout_dirty = false
+end
+
+local function Label_draw(self, bg_override, txtcol_override)
+	bg_override = bg_override or self.bc
+	txtcol_override = txtcol_override or self.fc
+
+	if self._layout_dirty or not self._layout_cache then
+		Label_rebuildLayout(self)
+	end
+
+	local layout = self._layout_cache
+
+	if self.radius then
+		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, bg_override)
+	else
+		term.drawPixels(self.x, self.y, bg_override, self.w, self.h)
+	end
+
+	local start_y
+	if layout.v_align == "top" then
+		start_y = self.y
+	elseif layout.v_align == "bottom" then
+		start_y = self.y + self.h - layout.block_h
+	else
+		start_y = self.y + math.floor((self.h - layout.block_h) / 2)
+	end
+
+	for i = 1, layout.num_lines do
+		local line = layout.lines[i]
+		local line_w = layout.widths[i]
+		local x_pos
+
+		if layout.h_align == "left" then
+			x_pos = self.x
+		elseif layout.h_align == "right" then
+			x_pos = self.x + self.w - line_w
+		else
+			x_pos = self.x + math.floor((self.w - line_w) / 2)
+		end
+
+		local y_pos = start_y + (i - 1) * (layout.line_h + layout.line_gap)
+
+		font.drawText(line, x_pos, y_pos, txtcol_override, nil, nil, nil, nil, nil, layout.bold, layout.scale) --, self.x, self.y, self.w, self.h, self.radius)
+	end
+end
+
+-- local function Label_draw(self, bg_override, txtcol_override)
+-- 	local offset = 0
+-- 	if self.radius then
+-- 		offset = self.radius
+-- 		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
+-- 	else
+-- 		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
+-- 	end
+-- 	if self.bold then
+-- 		font.boldAlignedText(self.text, self.x + offset, self.y, self.fc)
+-- 	else
+-- 		font.simpleText(self.text, self.x + offset, self.y, self.fc, self.w, self.h, self.align)
+-- 	end
+-- end
+
 local function Label_setText(self, text)
+	self._layout_dirty = true
 	self.text = tostring(text)
 	self.dirty = true
 end
@@ -860,6 +1063,8 @@ function UI.Label(args)
 	instance.text = args.text or ""
 	instance.align = args.align or "center"
 	-- instance.bold = args.bold
+	instance._layout_dirty = true
+	instance._layout_cache = nil
 
 	instance.draw = Label_draw
 	instance.setText = Label_setText
@@ -876,6 +1081,7 @@ local function Button_draw(self)
 	end
 	if self.radius then
 		g.draw_filled_rounded_rect(self.x ,self.y, self.w, self.h, self.radius, bc)
+		-- g.draw_rounded_rect_outline(self.x ,self.y, self.w, self.h, self.radius, fc)
 	else
 		term.drawPixels(self.x, self.y, bc, self.w, self.h)
 	end
@@ -1170,7 +1376,9 @@ end
 local function Scrollbar_draw(self)
 	term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
 	local slider_height = self:getSliderHeight()
-	g.draw_filled_rounded_rect(self.x, self.y, self.w, slider_height, 2, self.fc)
+	local slider_offset = self:getSliderOffset()
+	g.draw_filled_rounded_rect(self.x, self.y + slider_offset, self.w, slider_height, 2, self.fc)
+	-- local slider_height = self:getSliderHeight()
 	-- local slider_offset = self:getSliderOffset()
 	-- local slider_y_start = self.y + 1 + slider_offset
 
@@ -1716,6 +1924,7 @@ function UI.List(args)
 end
 
 local function Textfield_draw(self)
+	-- local oldClip = UI.term_setClip(self.x, self.y, self.w, self.h)
 	local offset = 1
 	if self.radius then
 		offset = self.radius
@@ -1727,11 +1936,13 @@ local function Textfield_draw(self)
 	if self.hidden == true then
 		text = _rep("*", #self.text)
 	end
-	if self.root.focus ~= self and #self.text == 0 and #self.hint*6 <= self.w then
+	if (self.disabled and #self.text == 0) or (self.root.focus ~= self and #self.text == 0 and #self.hint*6 <= self.w) then
 		font.simpleText(self.hint, self.x+offset, self.y, self.fc_alt)
 		return
 	end
-	font.simpleText(text, self.x+offset, self.y, self.fc)
+	-- font.simpleText(text, self.x+offset, self.y, self.fc)
+	font.simpleText(text:sub(self.offset + 1, _min(#self.text, self.offset + math.ceil(self.w/6))), self.x+offset, self.y, self.fc)
+	-- UI.term_unsetClip(oldClip)
 	-- if self.selected.status then
 	-- 	term.setBackgroundColor(self.bc_alt or colors.blue)
 	-- 	term.setTextColor(self.fc_alt or colors.white)
@@ -1778,8 +1989,8 @@ end
 
 local function Textfield_moveCursorPos(self, pos)
 	self.cursor_x = _min(_max(pos, 1), #self.text + 1)
-	if self.cursor_x - self.offset > self.w then
-		self.offset = self.cursor_x - self.w
+	if self.cursor_x - self.offset > math.ceil(self.w/6) then
+		self.offset = self.cursor_x - math.ceil(self.w/6)
 	elseif self.cursor_x - self.offset < 1 then
 		self.offset = self.cursor_x - 1
 	end
@@ -1834,6 +2045,7 @@ local function select_tf(self, new_x)
 end
 
 local function Textfield_onMouseDown(self, btn, x, y)
+	if self.disabled then return true end
 	self:moveCursorPos(x - self.x + 1 + self.offset)
 	local cx = self.cursor_x
 	self.click_pos_x = cx
@@ -1845,12 +2057,14 @@ local function Textfield_onMouseDown(self, btn, x, y)
 end
 
 local function Textfield_onMouseDrag(self, btn, x, y)
+	if self.disabled then return true end
 	local nX = x - self.x + 1 + self.offset
 	select_tf(self, nX)
 	return true
 end
 
 local function Textfield_onCharTyped(self, chr)
+	if self.disabled then return true end
 	delete_selected_tf(self)
 	self.text = _sub(self.text, 1, self.cursor_x - 1)..chr.._sub(self.text, self.cursor_x, #self.text)
 	self:moveCursorPos(self.cursor_x + 1)
@@ -1859,6 +2073,7 @@ local function Textfield_onCharTyped(self, chr)
 end
 
 local function Textfield_onPaste(self, text)
+	if self.disabled then return true end
 	delete_selected_tf(self)
 	text = text:match("([^\n]*)")
 	self.text = _sub(self.text, 1, self.cursor_x - 1)..text.._sub(self.text, self.cursor_x, #self.text)
@@ -1868,6 +2083,7 @@ local function Textfield_onPaste(self, text)
 end
 
 local function Textfield_onKeyUp(self, key)
+	if self.disabled then return true end
 	if key == keys.leftShift then
 		self.shift_held = nil
 		return true
@@ -1878,6 +2094,7 @@ local function Textfield_onKeyUp(self, key)
 end
 
 local function Textfield_onKeyDown(self, key, held)
+	if self.disabled then return true end
 	if key == keys.backspace then
 		if delete_selected_tf(self) then return true end
 		self.text = _sub(self.text, 1, _max(self.cursor_x - 2, 0)).._sub(self.text, self.cursor_x, #self.text)
@@ -1993,6 +2210,7 @@ function UI.Textfield(args)
 	instance.onKeyUp = Textfield_onKeyUp
 	-- instance.refreshBlinkStatus = Textfield_refreshBlinkStatus
 	instance.onEvent = Textfield_onEvent
+	instance.setDisabled = setDisabled
 
 	return instance
 end
@@ -2371,7 +2589,7 @@ function UI.TextBox(args)
 	}
 
 	function instance:getScrollMaxX()
-		return c.findMaxLenStrOfArray(self.lines) - self.w
+		return getMaxListW(self.lines) - self.w
 	end
 	function instance:getScrollMaxY()
 		return _max(0, #self.lines - self.h)
@@ -2730,20 +2948,16 @@ function UI.LoadingBar(args)
 end
 
 local function Dropdown_draw(self)
-	local element = self.array[self.item_index]
+	local index_arr = self.array[self.item_index]
 
 	if self.radius then
 		g.draw_filled_rounded_rect(self.x, self.y, self.w, 10, self.radius, self.bc)
 	else
 		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
 	end
-	if element then
-		font.simpleText(element, self.x + 3, self.y, self.fc)
-	end
 	font.simpleText('↕', self.x + self.w - 7, self.y, self.fc)
-	-- for ay = 0, 5 do
-	-- 	term.setPixel(self.x + self.w - 7, self.y + 1)
-	-- end
+	if not index_arr then return end
+	font.simpleText(index_arr, self.x + 3, self.y, self.fc)
 end
 
 local function context_onFocus(self, focused)
@@ -2768,13 +2982,12 @@ local function contextMouseDown(self, btn, x, y)
 end
 
 local function contextDraw(self) -- ВРЕМЕННОЕ НАДО МЕНЯТЬ
-	local dropdown = self.dropdown
 	if self.radius then
 		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
 	else
 		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
 	end
-	for i, v in pairs(dropdown.array) do
+	for i, v in ipairs(self.dropdown.array) do
 		font.simpleText(v, self.x + 3, self.y + ((i - 1) * 10), self.fc)
 	end
 end
@@ -2782,7 +2995,7 @@ end
 local function Dropdown_onMouseDown(self, btn, x, y)
 	if self.disabled then return true end
 
-	local box = UI.Box{ x = self.x, y = _min(self.root.h - #self.array*10, _max(0, self.y - ((self.item_index - 1) * 10))), w = self.w, h = #self.array*10, bc = self.bc, fc = self.fc, radius = self.radius}
+	local box = UI.Box{ x = self.x, y = _min(self.root.h - #self.array*10, _max(0, self.y - ((self.item_index - 1) * 10))), w = self.w, h = _max(10, #self.array*10), bc = self.bc, fc = self.fc, radius = self.radius}
 	box.dropdown = self
 	self.root:addChild(box)
 	self.root.focus = box
@@ -2813,7 +3026,7 @@ function UI.Dropdown(args)
 	instance.array = args.array or {}
 	instance.item_index = 1
 	if args.defaultValue then
-		for i, v in pairs(instance.array) do
+		for i, v in ipairs(instance.array) do
 			if v == args.defaultValue then
 				instance.item_index = i
 				break
@@ -3174,227 +3387,227 @@ function UI.DialWin(title, msg)
 	if ok then return textfield.text end
 end
 
-local function Keyboard_draw(self)
-	for i = 1, self.h - 2 do
-		term.setBackgroundColor(self.fc)
-		term.setTextColor(self.bc)
-		term.setCursorPos(self.w + self.x - 1, self.y + i)
-		term.write("\149")
-		term.setBackgroundColor(self.bc)
-		term.setTextColor(self.fc)
-		term.setCursorPos(self.x, self.y + i)
-		term.write("\149".._rep(" ",self.w - 2))
-	end
-	term.setBackgroundColor(self.bc)
-	term.setTextColor(self.fc)
-	term.setCursorPos(self.x, self.y)
-	term.write("\151".._rep("\131", self.w - 2))
-	term.setBackgroundColor(self.fc)
-	term.setTextColor(self.bc)
-	term.setCursorPos(self.w + self.x - 1, self.y)
-	term.write("\148")
-	term.setBackgroundColor(self.fc)
-	term.setTextColor(self.bc)
-	term.setCursorPos(self.x, self.h + self.y - 1)
-	term.write("\138".._rep("\143", self.w - 2).."\133")
-end
+-- local function Keyboard_draw(self)
+-- 	for i = 1, self.h - 2 do
+-- 		term.setBackgroundColor(self.fc)
+-- 		term.setTextColor(self.bc)
+-- 		term.setCursorPos(self.w + self.x - 1, self.y + i)
+-- 		term.write("\149")
+-- 		term.setBackgroundColor(self.bc)
+-- 		term.setTextColor(self.fc)
+-- 		term.setCursorPos(self.x, self.y + i)
+-- 		term.write("\149".._rep(" ",self.w - 2))
+-- 	end
+-- 	term.setBackgroundColor(self.bc)
+-- 	term.setTextColor(self.fc)
+-- 	term.setCursorPos(self.x, self.y)
+-- 	term.write("\151".._rep("\131", self.w - 2))
+-- 	term.setBackgroundColor(self.fc)
+-- 	term.setTextColor(self.bc)
+-- 	term.setCursorPos(self.w + self.x - 1, self.y)
+-- 	term.write("\148")
+-- 	term.setBackgroundColor(self.fc)
+-- 	term.setTextColor(self.bc)
+-- 	term.setCursorPos(self.x, self.h + self.y - 1)
+-- 	term.write("\138".._rep("\143", self.w - 2).."\133")
+-- end
 
-local function Keyboard_onEvent(self,evt)
-	if not self.parent then return false end
-	if evt[3] and evt[4] and self:check(evt[3],evt[4]) then
-		if EVENTS.TOP[evt[1]] then
-			for i = #self.children, 1, -1 do
-				local child = self.children[i]
-				if child:check(evt[3],evt[4]) and child:onEvent(evt) then
-					return true
-				end
-			end
-		elseif self.focus and EVENTS.FOCUS[evt[1]] and self.focus:onEvent(evt) then
-			return true
-		end
-		return true
-	end
-	return false
-end
+-- local function Keyboard_onEvent(self,evt)
+-- 	if not self.parent then return false end
+-- 	if evt[3] and evt[4] and self:check(evt[3],evt[4]) then
+-- 		if EVENTS.TOP[evt[1]] then
+-- 			for i = #self.children, 1, -1 do
+-- 				local child = self.children[i]
+-- 				if child:check(evt[3],evt[4]) and child:onEvent(evt) then
+-- 					return true
+-- 				end
+-- 			end
+-- 		elseif self.focus and EVENTS.FOCUS[evt[1]] and self.focus:onEvent(evt) then
+-- 			return true
+-- 		end
+-- 		return true
+-- 	end
+-- 	return false
+-- end
 
-function UI.Keyboard(width, height)
-	local instance = UI.Container(_floor((width - 21)/2) + 1, height - 6, 21, 7, colors.black)
-	instance.focus = nil
-	-- Стани: 0=default, 1=shift, 2=caps, 3=smileys
-	instance.upper = 0
+-- function UI.Keyboard(width, height)
+-- 	local instance = UI.Container(_floor((width - 21)/2) + 1, height - 6, 21, 7, colors.black)
+-- 	instance.focus = nil
+-- 	-- Стани: 0=default, 1=shift, 2=caps, 3=smileys
+-- 	instance.upper = 0
 
-	local layout_default = {
-		"1","2","3","4","5","6","7","8","9","0", --10
-		"q","w","e","r","t","y","u","i","o","p", --20
-		"a","s","d","f","g","h","j","k","l", --29
-		"\24".."\95","z","x","c","v","b","n","m", "\27".."-", --38
-		" ".."\2".." ", ",", ".", "  SPACE","\27", "\24", "\25", "\26", "\17".."\172"
-	}
+-- 	local layout_default = {
+-- 		"1","2","3","4","5","6","7","8","9","0", --10
+-- 		"q","w","e","r","t","y","u","i","o","p", --20
+-- 		"a","s","d","f","g","h","j","k","l", --29
+-- 		"\24".."\95","z","x","c","v","b","n","m", "\27".."-", --38
+-- 		" ".."\2".." ", ",", ".", "  SPACE","\27", "\24", "\25", "\26", "\17".."\172"
+-- 	}
 
-	local layout_shift = {
-		"1","2","3","4","5","6","7","8","9","0", --10 "\27)
-		"Q","W","E","R","T","Y","U","I","O","P", --20
-		"A","S","D","F","G","H","J","K","L", --29
-		"\24".."\95","Z","X","C","V","B","N","M", "\27".."-", --38
-		" ".."\2".." ", ",", ".", "  SPACE", "\27", "\24", "\25", "\26", "\17".."\172"
-	}
+-- 	local layout_shift = {
+-- 		"1","2","3","4","5","6","7","8","9","0", --10 "\27)
+-- 		"Q","W","E","R","T","Y","U","I","O","P", --20
+-- 		"A","S","D","F","G","H","J","K","L", --29
+-- 		"\24".."\95","Z","X","C","V","B","N","M", "\27".."-", --38
+-- 		" ".."\2".." ", ",", ".", "  SPACE", "\27", "\24", "\25", "\26", "\17".."\172"
+-- 	}
 
-	local layout_smile = {
-		-- Ряд 1 (індекси 1-10)
-		"!", "\"", "#", ";", "%", ":", "?", "*", "(", ")",
-		-- Ряд 2 (індекси 11-20)
-		"~", "@", "T", "$", "\19", "^", "&", "=", "+", "-",
-		-- Ряд 3 (індекси 21-29)
-		"_", "`", "'", "\171", "\187", "{", "}", "[", "]",
-		-- Ряд 4 (індекси 30-38)
-		layout_default[30], -- 30: Shift (Спеціальна, залишаємо)
-		"\177", "\191", "|", "/", "\\", "<", ">", -- 31-37 (z,x,c,v,b,n,m)
-		layout_default[38], -- 38: Backspace (Спеціальна, залишаємо)
-		-- Ряд 5 (індекси 39-45)
-		"ABC",         -- 39: "Smile" button, тепер це "ABC"
-		layout_default[40], -- 40: Comma (Спеціальна)
-		layout_default[41], -- 41: Dot (Спеціальна)
-		layout_default[42], -- 42: Space (Спеціальна)
-		layout_default[43], -- 43: Left (Спеціальна)
-		layout_default[44], -- 44: Up (Спеціальна)
-		layout_default[45], -- 45: Down (Спеціальна)
-		layout_default[46], -- 46: Right (Спеціальна)
-		layout_default[47],  -- 47: Enter (Спеціальна)
-	}
+-- 	local layout_smile = {
+-- 		-- Ряд 1 (індекси 1-10)
+-- 		"!", "\"", "#", ";", "%", ":", "?", "*", "(", ")",
+-- 		-- Ряд 2 (індекси 11-20)
+-- 		"~", "@", "T", "$", "\19", "^", "&", "=", "+", "-",
+-- 		-- Ряд 3 (індекси 21-29)
+-- 		"_", "`", "'", "\171", "\187", "{", "}", "[", "]",
+-- 		-- Ряд 4 (індекси 30-38)
+-- 		layout_default[30], -- 30: Shift (Спеціальна, залишаємо)
+-- 		"\177", "\191", "|", "/", "\\", "<", ">", -- 31-37 (z,x,c,v,b,n,m)
+-- 		layout_default[38], -- 38: Backspace (Спеціальна, залишаємо)
+-- 		-- Ряд 5 (індекси 39-45)
+-- 		"ABC",         -- 39: "Smile" button, тепер це "ABC"
+-- 		layout_default[40], -- 40: Comma (Спеціальна)
+-- 		layout_default[41], -- 41: Dot (Спеціальна)
+-- 		layout_default[42], -- 42: Space (Спеціальна)
+-- 		layout_default[43], -- 43: Left (Спеціальна)
+-- 		layout_default[44], -- 44: Up (Спеціальна)
+-- 		layout_default[45], -- 45: Down (Спеціальна)
+-- 		layout_default[46], -- 46: Right (Спеціальна)
+-- 		layout_default[47],  -- 47: Enter (Спеціальна)
+-- 	}
 
-	local keyLayout = {
-		-- Ряд 1: Цифри (y=1)
-		{ 1, 1, 1 }, { 2, 3, 1 }, { 3, 5, 1 }, { 4, 7, 1 }, { 5, 9, 1 }, { 6, 11, 1 }, { 7, 13, 1 }, { 8, 15, 1 }, { 9, 17, 1 }, { 10, 19, 1 },
-		-- Ряд 2: QWERTY (y=2)
-		{ 11, 1, 2 }, { 12, 3, 2 }, { 13, 5, 2 }, { 14, 7, 2 }, { 15, 9, 2 }, { 16, 11, 2 }, { 17, 13, 2 }, { 18, 15, 2 }, { 19, 17, 2 }, { 20, 19, 2 },
-		-- Ряд 3: ASDF (y=3)
-		{ 21, 2, 3 }, { 22, 4, 3 }, { 23, 6, 3 }, { 24, 8, 3 }, { 25, 10, 3 }, { 26, 12, 3 }, { 27, 14, 3 }, { 28, 16, 3 }, { 29, 18, 3 },
-		-- Ряд 4: ZXCV (y=4)
-		{ 30, 1, 4, "shift" },
-		{ 31, 4, 4 }, { 32, 6, 4 }, { 33, 8, 4 }, { 34, 10, 4 }, { 35, 12, 4 }, { 36, 14, 4 }, { 37, 16, 4 },
-		{ 38, 18, 4, "backspace" },
-		-- Ряд 5: Нижній (y=5)
-		{ 39, 1, 5, "smile" },
-		{ 40, 4, 5 }, -- comma
-		{ 41, 5, 5 }, -- dot
-		{ 42, 6, 5, "space" },
-		{ 43, 14, 5, "left" },
-		{ 44, 15, 5, "up"},
-		{ 45, 16, 5, "down"},
-		{ 46, 17, 5, "right" },
-		{ 47, 18, 5, "enter" },
-	}
+-- 	local keyLayout = {
+-- 		-- Ряд 1: Цифри (y=1)
+-- 		{ 1, 1, 1 }, { 2, 3, 1 }, { 3, 5, 1 }, { 4, 7, 1 }, { 5, 9, 1 }, { 6, 11, 1 }, { 7, 13, 1 }, { 8, 15, 1 }, { 9, 17, 1 }, { 10, 19, 1 },
+-- 		-- Ряд 2: QWERTY (y=2)
+-- 		{ 11, 1, 2 }, { 12, 3, 2 }, { 13, 5, 2 }, { 14, 7, 2 }, { 15, 9, 2 }, { 16, 11, 2 }, { 17, 13, 2 }, { 18, 15, 2 }, { 19, 17, 2 }, { 20, 19, 2 },
+-- 		-- Ряд 3: ASDF (y=3)
+-- 		{ 21, 2, 3 }, { 22, 4, 3 }, { 23, 6, 3 }, { 24, 8, 3 }, { 25, 10, 3 }, { 26, 12, 3 }, { 27, 14, 3 }, { 28, 16, 3 }, { 29, 18, 3 },
+-- 		-- Ряд 4: ZXCV (y=4)
+-- 		{ 30, 1, 4, "shift" },
+-- 		{ 31, 4, 4 }, { 32, 6, 4 }, { 33, 8, 4 }, { 34, 10, 4 }, { 35, 12, 4 }, { 36, 14, 4 }, { 37, 16, 4 },
+-- 		{ 38, 18, 4, "backspace" },
+-- 		-- Ряд 5: Нижній (y=5)
+-- 		{ 39, 1, 5, "smile" },
+-- 		{ 40, 4, 5 }, -- comma
+-- 		{ 41, 5, 5 }, -- dot
+-- 		{ 42, 6, 5, "space" },
+-- 		{ 43, 14, 5, "left" },
+-- 		{ 44, 15, 5, "up"},
+-- 		{ 45, 16, 5, "down"},
+-- 		{ 46, 17, 5, "right" },
+-- 		{ 47, 18, 5, "enter" },
+-- 	}
 
-	local function setKeyboardLayout(layoutTable, newUpperState)
-		instance.upper = newUpperState
-		for k, child in pairs(instance.children) do
-			if layoutTable[k] then
-				child:setText(layoutTable[k])
-			end
-		end
-		if newUpperState == 2 then
-			instance.children[30]:setText("\23".."\95")
-		end
-		if newUpperState == 3 or newUpperState == 0 then
-			instance.children[30].held = false
-		end
-		if instance.children[30] then instance.children[30].dirty = true end
-		if instance.children[39] then instance.children[39].dirty = true end
-	end
+-- 	local function setKeyboardLayout(layoutTable, newUpperState)
+-- 		instance.upper = newUpperState
+-- 		for k, child in pairs(instance.children) do
+-- 			if layoutTable[k] then
+-- 				child:setText(layoutTable[k])
+-- 			end
+-- 		end
+-- 		if newUpperState == 2 then
+-- 			instance.children[30]:setText("\23".."\95")
+-- 		end
+-- 		if newUpperState == 3 or newUpperState == 0 then
+-- 			instance.children[30].held = false
+-- 		end
+-- 		if instance.children[30] then instance.children[30].dirty = true end
+-- 		if instance.children[39] then instance.children[39].dirty = true end
+-- 	end
 
-	local specialActions = {
-		backspace = function (self)
-			os.queueEvent("key", keys.backspace)
-		end,
-		left = function (self)
-			os.queueEvent("key", keys.left)
-		end,
-		space = function (self)
-			os.queueEvent("char", " ")
-		end,
-		right = function (self)
-			os.queueEvent("key", keys.right)
-		end,
-		enter = function (self)
-			os.queueEvent("key", keys.enter)
-		end,
-		up = function (self)
-			os.queueEvent("key", keys.up)
-		end,
-		down = function (self)
-			os.queueEvent("key", keys.down)
-		end,
+-- 	local specialActions = {
+-- 		backspace = function (self)
+-- 			os.queueEvent("key", keys.backspace)
+-- 		end,
+-- 		left = function (self)
+-- 			os.queueEvent("key", keys.left)
+-- 		end,
+-- 		space = function (self)
+-- 			os.queueEvent("char", " ")
+-- 		end,
+-- 		right = function (self)
+-- 			os.queueEvent("key", keys.right)
+-- 		end,
+-- 		enter = function (self)
+-- 			os.queueEvent("key", keys.enter)
+-- 		end,
+-- 		up = function (self)
+-- 			os.queueEvent("key", keys.up)
+-- 		end,
+-- 		down = function (self)
+-- 			os.queueEvent("key", keys.down)
+-- 		end,
 
-		shift = function (self)
-			if instance.upper == 0 then
-				setKeyboardLayout(layout_shift, 1) -- Shift
-			elseif instance.upper == 1 then
-				setKeyboardLayout(layout_shift, 2) -- Caps
-			elseif instance.upper == 2 then
-				setKeyboardLayout(layout_default, 0)
-			elseif instance.upper == 3 then
-				self.held = false
-			end
-		end,
+-- 		shift = function (self)
+-- 			if instance.upper == 0 then
+-- 				setKeyboardLayout(layout_shift, 1) -- Shift
+-- 			elseif instance.upper == 1 then
+-- 				setKeyboardLayout(layout_shift, 2) -- Caps
+-- 			elseif instance.upper == 2 then
+-- 				setKeyboardLayout(layout_default, 0)
+-- 			elseif instance.upper == 3 then
+-- 				self.held = false
+-- 			end
+-- 		end,
 
-		-- (ОНОВЛЕНО) Посилається на локальні layout_* таблиці
-		smile = function (self)
-			if instance.upper == 3 then
-				setKeyboardLayout(layout_default, 0)
-			else
-				setKeyboardLayout(layout_smile, 3)
-			end
-		end
-	}
+-- 		-- (ОНОВЛЕНО) Посилається на локальні layout_* таблиці
+-- 		smile = function (self)
+-- 			if instance.upper == 3 then
+-- 				setKeyboardLayout(layout_default, 0)
+-- 			else
+-- 				setKeyboardLayout(layout_smile, 3)
+-- 			end
+-- 		end
+-- 	}
 
-	for _, keyDef in ipairs(keyLayout) do
-		local keyIndex = keyDef[1]
-		local relX = keyDef[2]
-		local relY = keyDef[3]
-		local actionName = keyDef[4]
+-- 	for _, keyDef in ipairs(keyLayout) do
+-- 		local keyIndex = keyDef[1]
+-- 		local relX = keyDef[2]
+-- 		local relY = keyDef[3]
+-- 		local actionName = keyDef[4]
 
-		if layout_default[keyIndex] then
-			local btn = UI.Button(1 + relX, 1 + relY, #layout_default[keyIndex], 1, layout_default[keyIndex], "center", instance.bc, colors.white)
-			btn.pressed = function (self)
-				os.queueEvent("char", self.text)
-				if instance.upper == 1 then
-					setKeyboardLayout(layout_default, 0)
-				end
-			end
-			btn.onEvent = function (self, evt)
-				if evt[1] == "mouse_click" then
-					if self.parent then self.parent.focus = self end
-					return self:onMouseDown(evt[2], evt[3], evt[4])
-				end
-				return onEvent(self, evt)
-			end
+-- 		if layout_default[keyIndex] then
+-- 			local btn = UI.Button(1 + relX, 1 + relY, #layout_default[keyIndex], 1, layout_default[keyIndex], "center", instance.bc, colors.white)
+-- 			btn.pressed = function (self)
+-- 				os.queueEvent("char", self.text)
+-- 				if instance.upper == 1 then
+-- 					setKeyboardLayout(layout_default, 0)
+-- 				end
+-- 			end
+-- 			btn.onEvent = function (self, evt)
+-- 				if evt[1] == "mouse_click" then
+-- 					if self.parent then self.parent.focus = self end
+-- 					return self:onMouseDown(evt[2], evt[3], evt[4])
+-- 				end
+-- 				return onEvent(self, evt)
+-- 			end
 
-			if actionName and specialActions[actionName] then
-				btn.pressed = specialActions[actionName]
-			end
+-- 			if actionName and specialActions[actionName] then
+-- 				btn.pressed = specialActions[actionName]
+-- 			end
 
-			if actionName == "shift" then
-				btn.onMouseUp = function (self, btn, x, y)
-					if self:check(x, y) and self.held == true then self:pressed() end
-					if self.parent.upper == 0 then self.held = false end
-					self.dirty = true
-					return true
-				end
-			end
+-- 			if actionName == "shift" then
+-- 				btn.onMouseUp = function (self, btn, x, y)
+-- 					if self:check(x, y) and self.held == true then self:pressed() end
+-- 					if self.parent.upper == 0 then self.held = false end
+-- 					self.dirty = true
+-- 					return true
+-- 				end
+-- 			end
 
-			instance:addChild(btn)
-		end
-	end
+-- 			instance:addChild(btn)
+-- 		end
+-- 	end
 
-	instance.draw = Keyboard_draw
-	instance.onLayout = Box_onLayout
-	instance.onEvent = Keyboard_onEvent
-	instance.onResize = function (width, height)
-		instance.local_x, instance.local_y = _floor((width - 21)/2) + 1, height - 6
-	end
+-- 	instance.draw = Keyboard_draw
+-- 	instance.onLayout = Box_onLayout
+-- 	instance.onEvent = Keyboard_onEvent
+-- 	instance.onResize = function (width, height)
+-- 		instance.local_x, instance.local_y = _floor((width - 21)/2) + 1, height - 6
+-- 	end
 
-	return instance
-end
+-- 	return instance
+-- end
 
 ---Creating new *object* of *class*
 ---@param x number
@@ -3684,5 +3897,53 @@ function UI.ContextMenu(args)
 
 	return instance
 end
+
+function UI.Build(node, parent, elementsById)
+	elementsById = elementsById or {}
+
+	local WidgetClass = UI[node.type]
+	if not WidgetClass then error("Unknown widget type: " .. tostring(node.type)) end
+
+	node.fc = node.fc or (parent and parent.fc) or colors.white
+	node.bc = node.bc or (parent and parent.bc) or colors.black
+	if type(node.w) == 'string' then
+		if node.w:find('%', 1, true) then
+			node.lW = tonumber(node.w:sub(1, #node.w - 1)) / 100
+			node.w = parent.w * node.lW
+		else
+			node.lW = node.w
+			node.w = font.calcWidth(node.text)
+		end
+	end
+	if type(node.h) == 'string' then
+		if node.h:find('%', 1, true) then
+			node.lH = tonumber(node.h:sub(1, #node.h - 1)) / 100
+			node.h = parent.h * node.lH
+		else
+			-- auto
+		end
+	end
+	local instance = WidgetClass(node)
+	if node.methods then
+	for k, v in pairs(node.methods) do
+		instance[k] = v
+	end
+	instance.methods = nil
+	end
+
+	if node.id then
+		elementsById[node.id] = instance
+	end
+
+	if node.children then
+		for _, childNode in ipairs(node.children) do
+			local childInstance = UI.Build(childNode, instance, elementsById)
+			instance:addChild(childInstance)
+		end
+	end
+
+	return instance, elementsById
+end
+
 
 return UI

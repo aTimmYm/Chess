@@ -33,6 +33,10 @@ function _Screen.closeModal(self)
 	end
 end
 
+function _Screen.getCurrent(self)
+	return self.current
+end
+
 function _Screen.register(self, name, class)
 	self.screens[name] = class
 end

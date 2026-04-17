@@ -35,9 +35,17 @@ local EVENTS = {
 }
 
 local expect = require "cc.expect".expect
-local blittle = require "blittle_extended"
+local blittle = require "Data/blittle_extended"
 -- local system = require "braunnnsys"
-local c = require "cfunc"
+-- local c = require "cfunc"
+local function getMaxListW(array)
+	local max = 0
+	for _, v in pairs(array) do
+		max = _max(max, #v)
+	end
+	return max
+end
+_G.copied = nil
 
 local ScrollableMixin = {}
 
@@ -222,7 +230,7 @@ end
 
 local function Container_layoutChild(self)
 	for _, child in ipairs(self.children) do
-		child.x, child.y = self.x + child.local_x - 1, self.y + child.local_y - 1
+		child.x, child.y = self.x + child.lX - 1, self.y + child.lY - 1
 	end
 end
 
@@ -251,8 +259,8 @@ local function Container_addChild(self, child, pos)
 	end
 
 	addRoot(child, self.root or self)
-	if not child.local_x then child.local_x = child.x end
-	if not child.local_y then child.local_y = child.y end
+	if not child.lX then child.lX = child.x end
+	if not child.lY then child.lY = child.y end
 	child.parent = self
 	if pos then
 		table_insert(self.children, pos, child)
@@ -271,7 +279,7 @@ local function Container_removeChild(self, child)
 	for i, v in ipairs(self.children) do
 		if v == child then
 			child.parent = nil
-			child.local_x, child.local_y = nil, nil
+			child.lX, child.lY = nil, nil
 			table.remove(self.children, i)
 			return true
 		end
@@ -281,7 +289,7 @@ end
 
 local function Container_redraw(self)
 	redraw(self)
-	for _, child in pairs(self.children) do
+	for _, child in ipairs(self.children) do
 		child:redraw()
 	end
 end
@@ -300,7 +308,7 @@ local function Container_onEvent(self, evt)
 			end
 		end
 	elseif not EVENTS.FOCUS[event] then
-		for _, child in pairs(self.children) do
+		for _, child in ipairs(self.children) do
 			if child:onEvent(evt) then
 				return true
 			end
@@ -461,10 +469,10 @@ local function ScrollBox_redraw(self)
 	-- term.setBackgroundColor(self.term.getBackgroundColor())
 	-- term.setCursorBlink(self.term.getCursorBlink())
 	if self.dirty then self:draw(); self.dirty = false end
-	for _,child in pairs(self.visibleChild) do
+	for _,child in ipairs(self.visibleChild) do
 		local tempX, tempY = child.x, child.y
-		child.x = child.local_x - self.scroll.pos_x
-		child.y = child.local_y - self.scroll.pos_y
+		child.x = child.lX - self.scroll.pos_x
+		child.y = child.lY - self.scroll.pos_y
 		child:redraw()
 		child.x = tempX
 		child.y = tempY
@@ -477,11 +485,11 @@ local function ScrollBox_onLayout(self)
 	self.visibleChild = {}
 	self.dirty = true
 	Container_onLayout(self)
-	for _, child in pairs(self.children) do
+	for _, child in ipairs(self.children) do
 		child.y = child.y - self.scroll.pos_y
 		child.x = child.x - self.scroll.pos_x
-		self.scroll.max_y = _max(_max(self.scroll.max_y, child.local_y + child.h) - self.h, 0)
-		self.scroll.max_x = _max(_max(self.scroll.max_x, child.local_x + child.w) - self.w, 0)
+		self.scroll.max_y = _max(_max(self.scroll.max_y, child.lY + child.h) - self.h, 0)
+		self.scroll.max_x = _max(_max(self.scroll.max_x, child.lX + child.w) - self.w, 0)
 		if child.y + child.h > self.y and child.y <= self.y + self.h - 1 then
 			table_insert(self.visibleChild, child)
 		end
@@ -751,7 +759,7 @@ function UI.RadioButton(args)
 			instance.text[i] = ""
 		end
 	end
-	local t = c.findMaxLenStrOfArray(instance.text)
+	local t = getMaxListW(instance.text)
 	instance.w = t == 0 and 1 or t + 2
 	instance.h = instance.count
 
@@ -853,6 +861,99 @@ end
 -- 		term.setBackgroundColor(bg_override); term.setCursorPos(self.x, i); term.setTextColor(txtcol_override); term.write(_rep(" ", self.w))
 -- 	end
 -- end
+
+local function split_paragraphs(text)
+	local paragraphs = {}
+	local start = 1
+	while true do
+		local pos = text:find("\n", start, true)
+		if not pos then
+			paragraphs[#paragraphs + 1] = text:sub(start)
+			break
+		end
+		paragraphs[#paragraphs + 1] = text:sub(start, pos - 1)
+		start = pos + 1
+	end
+	return paragraphs
+end
+
+local function split_words(str)
+	local words = {}
+	for w in str:gmatch("%S+") do
+		words[#words + 1] = w
+	end
+	return words
+end
+
+local function push_wrapped_word(out_lines, word, max_w)
+	local current = ""
+	for ch in utf8_chars(word) do
+		local candidate = current .. ch
+		if current == "" or #candidate <= max_w then
+			current = candidate
+		else
+			if current ~= "" then
+				out_lines[#out_lines + 1] = current
+			end
+			current = ch
+		end
+	end
+	if current ~= "" then
+		out_lines[#out_lines + 1] = current
+	end
+end
+
+local function wrap_text_to_width(text, max_w)
+	local lines = {}
+
+	for _, para in ipairs(split_paragraphs(text or "")) do
+		if para == "" then
+			lines[#lines + 1] = ""
+		else
+			local words = split_words(para)
+
+			if #words == 0 then
+				lines[#lines + 1] = ""
+			else
+				local current = ""
+
+				for _, word in ipairs(words) do
+					local word_w = #word
+
+					if word_w > max_w then
+						if current ~= "" then
+							lines[#lines + 1] = current
+							current = ""
+						end
+						push_wrapped_word(lines, word, max_w)
+					else
+						local candidate = (current == "") and word or (current .. " " .. word)
+						if #candidate <= max_w then
+							current = candidate
+						else
+							if current ~= "" then
+								lines[#lines + 1] = current
+							end
+							current = word
+						end
+					end
+				end
+
+				if current ~= "" then
+					lines[#lines + 1] = current
+				end
+			end
+		end
+	end
+
+	if #lines == 0 then
+		lines[1] = ""
+	end
+
+	return lines
+end
+
+UI.wrap_text_to_width = wrap_text_to_width
 
 local function Label_draw(self, bg_override, txtcol_override)
 	bg_override = bg_override or self.bc
@@ -1948,6 +2049,7 @@ local function select_tf(self, new_x)
 end
 
 local function Textfield_onMouseDown(self, btn, x, y)
+	if self.disabled then return true end
 	self:moveCursorPos(x - self.x + 1 + self.offset)
 	local cx = self.cursor_x
 	self.click_pos_x = cx
@@ -1959,12 +2061,14 @@ local function Textfield_onMouseDown(self, btn, x, y)
 end
 
 local function Textfield_onMouseDrag(self, btn, x, y)
+	if self.disabled then return true end
 	local nX = x - self.x + 1 + self.offset
 	select_tf(self, nX)
 	return true
 end
 
 local function Textfield_onCharTyped(self, chr)
+	if self.disabled then return true end
 	delete_selected_tf(self)
 	self.text = _sub(self.text, 1, self.cursor_x - 1)..chr.._sub(self.text, self.cursor_x, #self.text)
 	self:moveCursorPos(self.cursor_x + 1)
@@ -1973,7 +2077,9 @@ local function Textfield_onCharTyped(self, chr)
 end
 
 local function Textfield_onPaste(self, text)
+	if self.disabled then return true end
 	delete_selected_tf(self)
+	if _G.copied then text = _G.copied end
 	text = text:match("([^\n]*)")
 	self.text = _sub(self.text, 1, self.cursor_x - 1)..text.._sub(self.text, self.cursor_x, #self.text)
 	self:moveCursorPos(self.cursor_x + #text)
@@ -1982,6 +2088,7 @@ local function Textfield_onPaste(self, text)
 end
 
 local function Textfield_onKeyUp(self, key)
+	if self.disabled then return true end
 	if key == keys.leftShift then
 		self.shift_held = nil
 		return true
@@ -1992,6 +2099,7 @@ local function Textfield_onKeyUp(self, key)
 end
 
 local function Textfield_onKeyDown(self, key, held)
+	if self.disabled then return true end
 	if key == keys.backspace then
 		if delete_selected_tf(self) then return true end
 		self.text = _sub(self.text, 1, _max(self.cursor_x - 2, 0)).._sub(self.text, self.cursor_x, #self.text)
@@ -2028,8 +2136,8 @@ local function Textfield_onKeyDown(self, key, held)
 	elseif key == keys.leftCtrl and not held then
 		self.ctrl_held = true
 	elseif key == keys.c and self.ctrl_held then
-		local peremennaya = self.text:sub(self.selected.pos1_x, self.selected.pos2_x)
-		if _G.sysclipboard then _G.sysclipboard = peremennaya end
+		_G._G.copied = self.text:sub(self.selected.pos1_x, self.selected.pos2_x)
+		-- if _G.sysclipboard then _G.sysclipboard = peremennaya end
 		return true
 	elseif key == keys.a and self.ctrl_held then
 		self.selected.pos1_x = 1
@@ -2080,6 +2188,7 @@ function UI.Textfield(args)
 	instance.onPaste = Textfield_onPaste
 	instance.onKeyDown = Textfield_onKeyDown
 	instance.onKeyUp = Textfield_onKeyUp
+	instance.setDisabled = setDisabled
 
 	return instance
 end
@@ -2354,7 +2463,8 @@ local function TextBox_onKeyDown(self, key, held)
 			copy = copy .. self.lines[i].."\n"
 			-- end
 		end
-		if _G.sysclipboard then _G.sysclipboard = copy end
+		-- if _G.sysclipboard then _G.sysclipboard = copy end
+		_G.copied = copy
 		return true
 	elseif key == keys.a and self.ctrl_held then
 		local p1, p2 = self.selected.pos1, self.selected.pos2
@@ -2388,7 +2498,7 @@ local function TextBox_onKeyDown(self, key, held)
 		self:setLine(_sub(line, 1, self.cursor.x - 1), y)
 		self:moveCursorPos(1, y + 1)
 	elseif key == keys.tab then
-		self:onCharTyped('\t' .. _rep(" ", self.TabSize - 1))
+		self:onCharTyped('\t')
 	elseif key == keys.pageDown then
 		self:scrollY(self.h / self.scroll.sensitivity_y)
 		self.selected.status = false
@@ -2412,6 +2522,7 @@ function TextBox_onPaste(self, char)
 	local lines = self.lines
 	local t_line = self.lines[self.cursor.y]
 	local i = 0
+	if _G.copied then char = _G.copied end
 	local ostatok
 	for line in char:gmatch("[^\n]+") do
 		if i == 0 then
@@ -2458,7 +2569,7 @@ function UI.TextBox(args)
 	}
 
 	function instance:getScrollMaxX()
-		return c.findMaxLenStrOfArray(self.lines) - self.w
+		return getMaxListW(self.lines) - self.w
 	end
 	function instance:getScrollMaxY()
 		return _max(0, #self.lines - self.h)
@@ -2840,11 +2951,11 @@ local function contextMouseDown(self, btn, x, y)
 end
 
 local function contextDraw(self) -- ВРЕМЕННОЕ НАДО МЕНЯТЬ
-	local dropdown = self.dropdown
+	-- local dropdown = self.dropdown
 
 	paintutils.drawFilledBox(self.x, self.y, self.w + self.x - 1, self.h + self.y - 1, self.bc)
 
-	for i, v in pairs(dropdown.array) do
+	for i, v in ipairs(self.dropdown.array) do
 		term.setCursorPos(self.x, self.y + i - 1)
 		term.setBackgroundColor(self.bc)
 		term.setTextColor(self.fc)
@@ -2854,7 +2965,7 @@ end
 
 local function Dropdown_onMouseDown(self, btn, x, y)
 	if self.disabled then return true end
-	local box = UI.Box{ x = self.x, y = _min(self.root.h - #self.array, _max(1, self.y - (self.item_index - 1))), w = self.w, h = #self.array, bc = self.bc, fc = self.fc}
+	local box = UI.Box{ x = self.x, y = _min(self.root.h - #self.array, _max(1, self.y - (self.item_index - 1))), w = self.w, h = _max(1, #self.array), bc = self.bc, fc = self.fc}
 	box.dropdown = self
 	self.root:addChild(box)
 	self.root.focus = box
@@ -2885,7 +2996,7 @@ function UI.Dropdown(args)
 	instance.array = args.array or {}
 	instance.item_index = 1
 	if args.defaultValue then
-		for i, v in pairs(instance.array) do
+		for i, v in ipairs(instance.array) do
 			if v == args.defaultValue then
 				instance.item_index = i
 				break
@@ -2894,7 +3005,7 @@ function UI.Dropdown(args)
 	end
 	instance.orientation = orientation or "left"
 	if type(maxSizeW) ~= "number" then maxSizeW = nil end
-	instance.w = args.maxSizeW or _max(5, c.findMaxLenStrOfArray(instance.array) + 1)
+	instance.w = args.maxSizeW or _max(5, getMaxListW(instance.array) + 1)
 
 	instance.draw = Dropdown_draw
 	instance.pressed = pressed
@@ -3064,8 +3175,8 @@ end
 
 local function TabBar_onMouseUp(self, btn, x, y)
 	if y ~= self.y then return end
-	local local_x = x - self.x + 1
-	local new_index = _ceil(local_x / self.max_w)
+	local lX = x - self.x + 1
+	local new_index = _ceil(lX / self.max_w)
 	if new_index > #self.tabs then return end
 	self.selected = new_index
 	self.dirty = true
@@ -3138,51 +3249,61 @@ end
 ---@return boolean object true or false
 function UI.MsgWin(mode, title, msg)
 	local root = UI.Root()
+	local run = true
 
-	local instance = UI.Container(_floor(root.w*0.2 + 0.5), _floor(root.h*0.2  + 0.5), _floor(root.w*0.65  + 0.5), _floor(root.h*0.65  + 0.5), colors.black)
+	local instance = UI.Container({x = _floor(root.w*0.2 + 0.5), y = _floor(root.h*0.2  + 0.5), w = _floor(root.w*0.65  + 0.5), h = _floor(root.h*0.65  + 0.5), bc = colors.black})
 	instance.title = title or " Error "
+	instance.bc, instance.fc = colors.black, colors.white
 	instance.draw = MsgWin_draw
 	instance.onLayout = Box_onLayout
 
 	local ok = false
-	local label = UI.Label(2, 2, instance.w - 2, instance.h - 2, msg or "Message", "center", instance.bc, instance.fc)
+	local label = UI.Label({x = 2, y = 2, w = instance.w - 2, h = instance.h - 2, text = msg or "Message", align = "center", bc = instance.bc, fc = instance.fc})
 	instance:addChild(label)
 	local btnOK, btnYES
 	if mode == "INFO" then
-		btnOK = UI.Button(_floor((instance.w - 4)/2)+1, instance.h, 4, 1," OK ")
+		btnOK = UI.Button({x = _floor((instance.w - 4)/2)+1, y = instance.h, w = 4, h = 1, text = " OK ", bc = colors.black, fc = colors.white})
 		instance:addChild(btnOK)
 	elseif mode == "YES,NO" then
-		btnYES = UI.Button(_floor((instance.w - 5)/2) - 2, instance.h, 5, 1," YES ")
+		btnYES = UI.Button({x = _floor((instance.w - 5)/2) - 2, y = instance.h, w = 5, h = 1, text = " YES ", bc = colors.black, fc = colors.white})
 		instance:addChild(btnYES)
-		btnOK = UI.Button(_floor((instance.w + 4)/2), instance.h, 4, 1, " NO ")
+		btnOK = UI.Button({x = _floor((instance.w + 4)/2), y = instance.h, w = 4, h = 1, text = " NO ", bc = colors.black, fc = colors.white})
 		instance:addChild(btnOK)
 
 		btnYES.pressed = function (self)
-			table.remove(root.children, 1)
-			root.running_program = false
+			-- table.remove(root.children, 1)
+			run = false
 			ok = true
 		end
 	end
 
 	btnOK.pressed = function (self)
-		table.remove(root.children, 1)
-		root.running_program = false
+		-- table.remove(root.children, 1)
+		run = false
 	end
 
 	instance.onResize = function (width, height)
-		instance.local_x, instance.local_y = math.floor(width*0.2 + 0.5), math.floor(height*0.2  + 0.5)
+		instance.lX, instance.lY = math.floor(width*0.2 + 0.5), math.floor(height*0.2  + 0.5)
 		instance.w,  instance.h = math.floor(width*0.65  + 0.5), math.floor(height*0.65  + 0.5)
 		label.w, label.h = instance.w - 2, instance.h - 2
 		if mode == "INFO" then
-			btnOK.local_x, btnOK.local_y = _floor((instance.w - 4)/2), instance.h
+			btnOK.lX, btnOK.lY = _floor((instance.w - 4)/2), instance.h
 		elseif mode == "YES,NO" then
-			btnYES.local_x, btnYES.local_y = _floor((instance.w - 5)/2) - 2, instance.h
-			btnOK.local_x, btnOK.local_y = _floor((instance.w + 4)/2), instance.h
+			btnYES.lX, btnYES.lY = _floor((instance.w - 5)/2) - 2, instance.h
+			btnOK.lX, btnOK.lY = _floor((instance.w + 4)/2), instance.h
 		end
 	end
 
 	root:addChild(instance)
-	root:mainloop()
+	root:show()
+	while run do
+		local evt = {coroutine.yield()}
+		if evt[1] == 'terminate' then
+			break
+		end
+		root:onEvent(evt)
+	end
+	table.remove(root.children, 1)
 
 	return ok
 end
@@ -3193,50 +3314,55 @@ end
 ---@return string|nil Returns entered text or nil if cancelled
 function UI.DialWin(title, msg)
 	local root = UI.Root()
+	local run = true
 
-	local instance = UI.Container(_floor((root.w - 24)/2) + 1, _floor((root.h - 4)/2), 24, 4, colors.black)
+	local instance = UI.Container({x = _floor((root.w - 24)/2) + 1, y = _floor((root.h - 4)/2), w = 24, h = 4, bc = colors.black, fc = colors.white})
 	instance.title = title or " Title "
 	instance.draw = MsgWin_draw
 	instance.onLayout = Box_onLayout
 
-	local label = UI.Label(2, 2, instance.w - 2, 1, msg or "", "left", instance.bc, instance.fc)
+	local label = UI.Label({x = 2, y = 2, w = instance.w - 2, h = 1, text = msg or "", align = "left", bc = instance.bc, fc = instance.fc})
 	instance:addChild(label)
 
-	local textfield = UI.Textfield(label.local_x, label.local_y + 1, instance.w - 2, 1, "", false, colors.gray--[[instance.bc]], instance.fc)
+	local textfield = UI.Textfield({x = label.lX, y = label.lY + 1, w = instance.w - 2, h = 1, bc = colors.gray--[[instance.bc]], fc = instance.fc})
 	instance:addChild(textfield)
 
-	local btnOK = UI.Button(_floor(instance.w/2 - 4 - 1), instance.h, 4, 1, " OK ", _, instance.bc, instance.fc)
+	local btnOK = UI.Button({x = _floor(instance.w/2 - 4 - 1), y = instance.h, w = 4, h = 1, text = " OK ", bc = instance.bc, fc = instance.fc})
 	instance:addChild(btnOK)
 	local ok = nil
 
 	btnOK.pressed = function (self)
-		table.remove(root.children, 1)
-		root.running_program = false
+		run = false
 		ok = true
 	end
 
-	local btnCANCEL = UI.Button(_floor(instance.w/2), instance.h, 8, 1, " CANCEL ", _, instance.bc, instance.fc)
+	local btnCANCEL = UI.Button({x = _floor(instance.w/2), y = instance.h, w = 8, h = 1, text = " CANCEL ", bc = instance.bc, fc = instance.fc})
 	instance:addChild(btnCANCEL)
 
 	textfield.pressed = function (self)
-		table.remove(root.children, 1)
-		root.running_program = false
+		run = false
 		ok = true
 	end
 
 	btnCANCEL.pressed = function (self)
-		table.remove(root.children, 1)
-		root.running_program = false
+		run = false
 	end
 
 	instance.onResize = function (width, height)
-		instance.local_x, instance.local_y = _floor((width - 24)/2), _floor((height - 4)/2)
+		instance.lX, instance.lY = _floor((width - 24)/2), _floor((height - 4)/2)
 	end
 
 	root:addChild(instance)
 	root.focus = textfield
-	root:mainloop()
-
+	root:show()
+	while run do
+		local evt = {coroutine.yield()}
+		if evt[1] == 'terminate' then
+			break
+		end
+		root:onEvent(evt)
+	end
+	table.remove(root.children, 1)
 	if ok then return textfield.text end
 end
 
@@ -3456,7 +3582,7 @@ function UI.Keyboard(width, height)
 	instance.onLayout = Box_onLayout
 	instance.onEvent = Keyboard_onEvent
 	instance.onResize = function (width, height)
-		instance.local_x, instance.local_y = _floor((width - 21)/2) + 1, height - 6
+		instance.lX, instance.lY = _floor((width - 21)/2) + 1, height - 6
 	end
 
 	return instance
