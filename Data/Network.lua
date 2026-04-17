@@ -25,6 +25,8 @@ function _Network.updateModems()
 	modems = {peripheral.find('modem')}
 	if #modems > 0 then
 		modem = peripheral.getName(modems[1])
+	else
+		modem = nil
 	end
 end
 
@@ -97,7 +99,7 @@ end
 function _Network.disconnectFromServer(self)
 	if Rednet then
 		rednet.send(self.rednetID, 'rednet_server_closed')
-		rednet.close('back')
+		rednet.close(modem)
 		Rednet = nil
 		return self.closeHandler()
 	end

@@ -117,7 +117,8 @@ assert(Lua_has_int64 or Lua_has_int32 or not Lua_has_integers, "Lua integers mus
 --   Using "int128" instead of "int64" is not OK: "int128" would require different branch of implementation for optimized SHA512.
 
 -- Check for LuaJIT and 32-bit bitwise libraries
-local is_LuaJIT = ({false, [1] = true})[1] and _VERSION ~= "Luau" and (type(jit) ~= "table" or jit.version_num >= 20000)  -- LuaJIT 1.x.x and Luau are treated as vanilla Lua 5.1/5.2
+-- local is_LuaJIT = ({false, [1] = true})[1] and _VERSION ~= "Luau" and (type(jit) ~= "table" or jit.version_num >= 20000)  -- LuaJIT 1.x.x and Luau are treated as vanilla Lua 5.1/5.2
+local is_LuaJIT = false
 local is_LuaJIT_21  -- LuaJIT 2.1+
 local LuaJIT_arch
 local ffi           -- LuaJIT FFI library (as a table)
@@ -126,7 +127,7 @@ local library_name
 
 if is_LuaJIT then
    -- Assuming "bit" library is always available on LuaJIT
-   b = require"bit"
+   b = require 'bit'
    library_name = "bit"
    -- "ffi" is intentionally disabled on some systems for safety reason
    local LuaJIT_has_FFI, result = pcall(require, "ffi")
@@ -136,14 +137,14 @@ if is_LuaJIT then
    is_LuaJIT_21 = not not loadstring"b=0b0"
    LuaJIT_arch = type(jit) == "table" and jit.arch or ffi and ffi.arch or nil
 else
+	for _, libname in ipairs(_VERSION == "Lua 5.2" and {"bit32", "bit"} or {"bit", "bit32"}) do
+	if type(_G[libname]) == "table" and _G[libname].bxor then
+		b = _G[libname]
+		library_name = libname
+		break
+	end
+	end
    -- For vanilla Lua, "bit"/"bit32" libraries are searched in global namespace only.  No attempt is made to load a library if it's not loaded yet.
-   for _, libname in ipairs(_VERSION == "Lua 5.2" and {"bit32", "bit"} or {"bit", "bit32"}) do
-      if type(_G[libname]) == "table" and _G[libname].bxor then
-         b = _G[libname]
-         library_name = libname
-         break
-      end
-   end
 end
 
 --------------------------------------------------------------------------------

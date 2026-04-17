@@ -1,5 +1,4 @@
 -- Font.lua
-
 local Font = {}
 
 Font.glyphs = {
@@ -26,7 +25,7 @@ Font.glyphs = {
 		"## ##",
 		" ### ",
 		"     ",
-  	},
+		},
 	["\3"] = {
 		"     ",
 		"     ",
@@ -38,7 +37,7 @@ Font.glyphs = {
 		" ### ",
 		"  #  ",
 		"     ",
-  	},
+		},
 	["\4"] = {
 		"     ",
 		"     ",
@@ -50,7 +49,7 @@ Font.glyphs = {
 		" ### ",
 		"  #  ",
 		"     ",
-  	},
+		},
 	["\5"] = {
 		"     ",
 		"     ",
@@ -62,7 +61,7 @@ Font.glyphs = {
 		"  #  ",
 		" ### ",
 		"     ",
-  	},
+		},
 	["\6"] = {
 		"     ",
 		"     ",
@@ -74,7 +73,7 @@ Font.glyphs = {
 		"  #  ",
 		" ### ",
 		"     ",
-  	},
+		},
 	["•"] = {
 		"    ",
 		"    ",
@@ -239,6 +238,54 @@ Font.glyphs = {
 		"     ",
 		"     ",
 		"#####",
+		"     ",
+		"     ",
+		"     ",
+		"     ",
+},
+	["—"] = {
+		"      ",
+		"      ",
+		"      ",
+		"      ",
+		"      ",
+		"######",
+		"      ",
+		"      ",
+		"      ",
+		"      ",
+},
+	["’"] = {
+		"  ",
+		" #",
+		" #",
+		"# ",
+		"  ",
+		"  ",
+		"  ",
+		"  ",
+		"  ",
+		"  ",
+},
+	["“"] = {
+		"     ",
+		" #  #",
+		"#  # ",
+		"## ##",
+		"     ",
+		"     ",
+		"     ",
+		"     ",
+		"     ",
+		"     ",
+},
+	["”"] = {
+		"     ",
+		"## ##",
+		" #  #",
+		"#  # ",
+		"     ",
+		"     ",
 		"     ",
 		"     ",
 		"     ",
@@ -575,8 +622,8 @@ Font.glyphs = {
 		"     ",
 		"     ",
 		"     ",
-		"#####",
 		"     ",
+		"#####",
 	},
 
 	['@'] = {
@@ -2254,9 +2301,7 @@ Font.glyphs = {
 	},
 }
 
-Font.charWidth = 6
-Font.charHeight = 10
-Font.interval = 1
+local textRunsCache = {}
 
 local UPPER_MAP = {
 	["а"]="А", ["б"]="Б", ["в"]="В", ["г"]="Г", ["д"]="Д",
@@ -2305,85 +2350,184 @@ function Font.lower(str)
 	return table.concat(result)
 end
 
-local function isInside(fx, fy, x, y, w, h)
-	return
-	(fx >= x and
-	fx <= x + w and
-	fy >= y and
-	fy <= y + h)
+Font.charWidth = 6
+Font.charHeight = 10
+Font.interval = 1
+
+local _max = math.max
+local _min = math.min
+local _ceil = math.ceil
+local _floor = math.floor
+
+local glyphWidthCache = {}
+local glyphRunsCache = {}
+
+function Font.clearCache()
+	glyphWidthCache = {}
+	glyphRunsCache = {}
+	textRunsCache = {}
 end
 
-local function isInsideRect(dx, dy, radius)
-	local c = radius - 0.5
-	return (dx - c)^2 + (dy - c)^2 <= radius * radius + 0.01
+function Font.setGlyphs(glyphTable)
+	Font.glyphs = glyphTable or {}
+	Font.clearCache()
 end
 
--- Допоміжна функція: чи знаходиться точка (x, y) всередині кола?
-local function isInsideCirle(x, y, cx, cy, radius)
-	local dx = x - cx
-	local dy = y - cy
-	-- Використовуємо формулу кола x^2 + y^2 <= R^2 (без math.sqrt для швидкодії)
-	-- Додаємо мізерну похибку (0.01), щоб нівелювати проблеми з плаваючою комою
-	return (dx * dx + dy * dy) <= (radius * radius + 0.01)
+local function utf8_chars(str)
+	-- if utf8 and utf8.codes and not jit then
+	--   local iter, state, init = utf8.codes(str)
+	--   return function()
+	--     local byte_pos, codepoint = iter(state, init)
+	--     init = byte_pos
+	--     if not byte_pos then return nil end
+	--     return utf8.char(codepoint)
+	--   end
+	-- end
+	if utf8 and utf8.offset then
+		local pos = 1
+		local n = #str
+
+		return function()
+			if pos > n then
+				return nil
+			end
+
+			local nextPos = utf8.offset(str, 2, pos)
+
+			if nextPos then
+				local ch = str:sub(pos, nextPos - 1)
+				pos = nextPos
+				return ch
+			else
+				local ch = str:sub(pos, n)
+				pos = n + 1
+				return ch
+			end
+		end
+	end
+
+	local pos, n = 1, #str
+	return function()
+		if pos > n then return nil end
+		local b = str:byte(pos)
+		local len = 1
+		if b < 0x80 then
+			len = 1
+		elseif b < 0xE0 then
+			len = 2
+		elseif b < 0xF0 then
+			len = 3
+		else
+			len = 4
+		end
+		local ch = str:sub(pos, pos + len - 1)
+		pos = pos + len
+		return ch
+	end
 end
 
--- local function isInsideRoundedRect(fx, fy, x, y, w, h, r)
--- 	if not -- inside default rect
--- 	(fx >= x and
--- 	fx <= x + w and
--- 	fy >= y and
--- 	fy <= y + h)
--- 	then return false end
 
--- 	-- inside without circles
--- 	if fx >= x + r and fx < x + w - r then return true end
---     if fy >= y + r and fy < y + h - r then return true end
-
--- 	-- rounded corners
--- 	if isInsideCirle(fx, fy, x + r, y + r, r) then return true end
--- 	if isInsideCirle(fx, fy, x + r, y + h - r, r) then return true end
--- 	if isInsideCirle(fx, fy, x + w - r, y + r, r) then return true end
--- 	if isInsideCirle(fx, fy, x + w - r, y + h - r, r) then return true end
-
--- 	return false
--- end
-
-local function isInsideRoundedRect(fx, fy, x, y, w, h, r)
-    if not (fx and fy and x and y and w and h) then return false end
-
-    local R = math.floor(r or 0)
-    R = math.min(R, math.floor(w / 2), math.floor(h / 2))
-
-    if fx < x or fx > x + w - 1 or fy < y or fy > y + h - 1 then
-        return false
-    end
-
-    if fy >= y + R and fy <= y + h - R - 1 then
-        return true
-    end
-
-    local j
-    if fy < y + R then
-        j = fy - y
-    else
-        j = (y + h - 1) - fy
-    end
-
-    local offset = R
-    for i = 0, R - 1 do
-        if isInsideRect(i, j, R) then
-            offset = i
-            break
-        end
-    end
-
-    return fx >= x + offset and fx <= x + w - 1 - offset
+local function getBoldExtra(bold)
+	return (bold == true and 1) or (type(bold) == "number" and bold or 0)
 end
 
-local function checkInside(fx, fy, x, y, w, h, radius)
-	if not (fx and fy and x and y and w and h) then return true end
-	if radius then return isInsideRoundedRect(fx, fy, x, y, w, h, radius) end
-	return isInside(fx, fy, x, y, w, h)
+local function getGlyph(ch)
+	return Font.glyphs[ch] or Font.glyphs["?"]
+end
+
+local function getGlyphWidth(ch)
+	local cached = glyphWidthCache[ch]
+	if cached then return cached end
+
+	local glyph = getGlyph(ch)
+	local maxw = 0
+	for row = 1, Font.charHeight do
+		local line = glyph[row] or ""
+		if #line > maxw then
+			maxw = #line
+		end
+	end
+
+	local w = _min(Font.charWidth, maxw)
+	glyphWidthCache[ch] = w
+	return w
+end
+
+local function buildGlyphRuns(glyph)
+	local runs = {}
+
+	for row = 1, Font.charHeight do
+		local line = glyph[row] or ""
+		local rowRuns = {}
+		local i = 1
+
+		while i <= #line do
+			while i <= #line and line:sub(i, i) ~= "#" do
+				i = i + 1
+			end
+			if i > #line then break end
+
+			local start_i = i
+			while i <= #line and line:sub(i, i) == "#" do
+				i = i + 1
+			end
+
+			rowRuns[#rowRuns + 1] = { start_i, i - start_i }
+		end
+
+		runs[row] = rowRuns
+	end
+
+	return runs
+end
+
+local function getGlyphRuns(ch)
+	local cached = glyphRunsCache[ch]
+	if cached then return cached end
+
+	local glyph = getGlyph(ch)
+	cached = buildGlyphRuns(glyph)
+	glyphRunsCache[ch] = cached
+	return cached
+end
+
+local function buildTextRuns(text, fc)
+	local cached = textRunsCache[text]
+	if cached then return cached end
+
+	local runs = {}
+
+	local px = 0
+
+	for ch in utf8_chars(text) do
+		local glyphRuns = getGlyphRuns(ch)
+		local len = getGlyphWidth(ch)
+
+		for row = 1, Font.charHeight do
+			local rowRuns = glyphRuns[row]
+
+			for r = 1, #rowRuns do
+				local run = rowRuns[r]
+
+				runs[#runs + 1] = {
+					x = px + run[1] - 1,
+					y = row - 1,
+					w = run[2]
+				}
+			end
+		end
+
+		px = px + len + Font.interval
+	end
+
+	cached = {
+		runs = runs,
+		width = px
+	}
+
+	textRunsCache[text] = cached
+
+	return cached
 end
 
 local function checkGM()
@@ -2392,180 +2536,134 @@ local function checkGM()
 	end
 end
 
-local function getGlyph(ch)
-	return Font.glyphs[ch] or Font.glyphs["?"]
+local function isInside(fx, fy, x, y, w, h)
+	return (fx >= x and fx <= x + w - 1 and fy >= y and fy <= y + h - 1)
 end
 
-local function getChar(s, i)
-	local offset = utf8.offset(s, i)
-	if not offset then return nil end
-	local nextOffset = utf8.offset(s, i + 1) or (#s + 1)
-	return s:sub(offset, nextOffset - 1)   -- тепер це повний символ!
+local function isInsideRect(dx, dy, radius)
+	local c = radius - 0.5
+	return (dx - c)^2 + (dy - c)^2 <= radius * radius + 0.01
+end
+
+local function isInsideRoundedRect(fx, fy, x, y, w, h, r)
+	if not (fx and fy and x and y and w and h) then return false end
+
+	local R = math.floor(r or 0)
+	R = math.min(R, math.floor(w / 2), math.floor(h / 2))
+
+	if fx < x or fx > x + w - 1 or fy < y or fy > y + h - 1 then
+		return false
+	end
+
+	if fy >= y + R and fy <= y + h - R - 1 then
+		return true
+	end
+
+	local j
+	if fy < y + R then
+		j = fy - y
+	else
+		j = (y + h - 1) - fy
+	end
+
+	local offset = R
+	for i = 0, R - 1 do
+		if isInsideRect(i, j, R) then
+			offset = i
+			break
+		end
+	end
+
+	return fx >= x + offset and fx <= x + w - 1 - offset
+end
+
+local function checkInside(fx, fy, x, y, w, h, radius)
+	if not (fx and fy and x and y and w and h) then return true end
+	if radius then return isInsideRoundedRect(fx, fy, x, y, w, h, radius) end
+	return isInside(fx, fy, x, y, w, h)
 end
 
 function Font.calcWidth(text, isbold, scale)
 	checkGM()
-	if not scale then
-		scale = 1
-	else
-		scale = math.max(1, math.min(10, scale))
+	scale = scale and _max(1, _min(10, scale)) or 1
+	if not utf8.len(text) then
+		error('Invalid character in: \'' .. tostring(text) .. '\'', 2)
 	end
-	if not utf8.len(text) then error('Invalid character in: \'' .. text .. '\'', 2) end
+
 	local px = 0
-	for i = 1, utf8.len(text) do
-		local ch = getChar(text, i)
-		local glyph = getGlyph(ch)
-		local len = 0
-		for row = 1, Font.charHeight do
-			local line = glyph[row]
-			len = math.max(#line, len)
-		end
+	local bold_extra = getBoldExtra(isbold)
 
-		px = px + math.ceil(scale * math.min(Font.charWidth, len) + Font.interval * scale) + (isbold == true and 1 or type(isbold) == 'number' and isbold or 0)
+	for ch in utf8_chars(text) do
+		local len = getGlyphWidth(ch)
+		px = px + _ceil(scale * len + Font.interval * scale) + bold_extra
 	end
-	px = px - Font.interval * scale
-	return px
+
+	if px > 0 then
+		px = px - Font.interval * scale
+	end
+
+	return _max(0, px)
 end
 
-local function drawPx(pixel, scale, sx, sy, fc, bc)
-	scale = math.ceil(scale)
-	if pixel == "#" then
-		for dy = 0, scale - 1 do
-			for dx = 0, scale - 1 do
-				term.setPixel(sx + dx, sy + dy, fc)
-				if bold then term.setPixel(sx + scale, sy, fc) end
-			end
-		end
-	elseif bc and pixel == " " then
-		for dy = 0, scale - 1 do
-			for dx = 0, scale - 1 do
-				term.setPixel(sx + dx, sy + dy, bc)
-			end
-		end
-	end
-end
-
-local function drawUnderline(fromX, toX, y, fc, scale, inside_x, inside_y, inside_w, inside_h, radius)
-	local sy = y + Font.charHeight * scale - 1
-	for x = fromX, toX do
-		for s = 0, scale - 1 do
-			local line_y = sy + s
-			if checkInside(x, line_y, inside_x, inside_y, inside_w, inside_h, radius) then term.setPixel(x, line_y, fc) end
-		end
-	end
-end
-
----@alias color number
-
----comment
----@param text string
+---Function draws text in term.setGraphicsMode(1)
+---@param text string Text that should be written
 ---@param x number
 ---@param y number
----@param fc color
+---@param fc color Text color
 ---@param w? number
 ---@param h? number
----@param bc? color
----@param align? string
----@param underline? boolean
----@param bold? boolean
----@param scale? number
----@param inside_x? number
----@param inside_y? number
----@param inside_w? number
----@param inside_h? number
----@param radius? number
-function Font.drawText(text, x, y, fc, w, h, bc, align, underline, bold, scale, inside_x, inside_y, inside_w, inside_h, radius)
-	checkGM()
-	if not scale then
-		scale = 1
-	else
-		scale = math.max(1, math.min(10, scale))
-	end
-	if not utf8.len(text) then error('Invalid character in: \'' .. text .. '\'', 2) end
+---@param align? string Enter w and h to use. Combine 'top', 'bot', 'center', 'left' and 'right' to select align. Example 'top_right', 'botleft'; 'center' is default value for that param.
+---@param scale? integer integer >= 1
+---@return nil
+function Font.drawText(text, x, y, fc, w, h, align, scale)
+	scale = scale and _max(1, _min(10, scale)) or 1
 	if align and w and h then
 		local textWidth = Font.calcWidth(text, bold, scale)
 		local dx = w - textWidth
 		local dy = h - Font.charHeight * scale
-		-- align
+
 		local X, Y = x, y
-		x = X + math.floor(dx / 2)
-		y = Y + math.floor(dy / 2)
+		x = X + _floor(dx / 2)
+		y = Y + _floor(dy / 2)
+
 		if align:find('left', 1, true) then
 			x = X
 		elseif align:find('right', 1, true) then
 			x = X + dx
 		end
+
 		if align:find('top', 1, true) then
 			y = Y
-		elseif align:find('bot', 1, true) then
+		elseif align:find('bot', 1, true) or align:find('bottom', 1, true) then
 			y = Y + dy
 		end
 	end
+	y = y - 1
 
-	local px = x
-	for i = 1, utf8.len(text) do
-		local ch = getChar(text, i)
-		local glyph = getGlyph(ch)
-		local len = 0
-		for row = 1, Font.charHeight do
-			local line = glyph[row]
-			if not line then return error('Invalid bitmap of ' .. ch) end
-			len = math.max(#line, len)
-			for col = 1, Font.charWidth do
-				local pixel = line:sub(col, col)
-				local sx, sy = px + (col - 1) * scale, y + (row - 2) * scale
-				if checkInside(sx, sy, inside_x, inside_y, inside_w, inside_h, radius) then
-					drawPx(pixel, scale, sx, sy, fc, bc)
-				end
-			end
-		end
-		px = px + math.ceil(scale * math.min(Font.charWidth, len) + Font.interval * scale) + (bold == true and 1 or type(isbold) == 'number' and isbold or 0)
-	end
-	if underline then
-		drawUnderline(x, px - Font.interval, y, fc, scale, inside_x, inside_y, inside_w, inside_h)
+	local data = buildTextRuns(text)
+
+	local runs = data.runs
+
+	for i = 1, #runs do
+		local r = runs[i]
+
+		term.drawPixels(
+			x + r.x,
+			y + r.y,
+			fc,
+			r.w,
+			1
+		)
 	end
 end
 
----comment
----@param text string
----@param x number
----@param y number
----@param fc color
----@param w number
----@param h number
----@param align string
 function Font.simpleText(text, x, y, fc, w, h, align)
-	return Font.drawText(text, x, y, fc, w, h, nil, align)
-end
-
-function Font.underlinedAlignedText(text, x, y, fc, w, h, align)
-	return Font.drawText(text, x, y, fc, w, h, nil, align, true)
-end
-
-function Font.boldAlignedText(text, x, y, fc, w, h, align)
-	return Font.drawText(text, x, y, fc, w, h, nil, align, false, true)
-end
-
-function Font.underlinedBoldAlignedText(text, x, y, fc, w, h, align)
-	return Font.drawText(text, x, y, fc, w, h, nil, align, true, true)
+	return Font.drawText(text, x, y, fc, w, h, align)
 end
 
 function Font.write(text)
 	local x, y = term.getCursorPos()
 	return Font.drawText(text, x, y, term.getTextColor())
-end
-
-function Font.aText(a)
-	if not a or not a.text then return end
-	return Font.drawText(
-	a.text, a.x, a.y, a.fc,
-	a.w, a.h, a.bc, a.align,
-	a.underline, a.bold, a.scale,
-	a.inside_x or a.ix,
-	a.inside_y or a.iy,
-	a.inside_w or a.iw,
-	a.inside_h or a.ih
-)
 end
 
 return Font

@@ -42,7 +42,7 @@ end
 
 local function onMouseDown(self, btn, mx, my)
 	local game = self.game
-	if game.team and (game.turn ~= game.team) then return end
+	if game.team and (game.turn ~= game.team) or game.pendingPromotion then return end
 	local x, y = self:squareAtMouse(mx, my)
 	if not x then return true end
 
@@ -50,7 +50,13 @@ local function onMouseDown(self, btn, mx, my)
 
 	if self.selected then
 		local sX, sY = self.selected.x, self.selected.y
-		if game:moveSelectedTo(x, y, self.selected) then
+		local ret = game:moveSelectedTo(x, y, self.selected)
+		if ret == 'promo' then
+			if self.waitingPromo then
+				self:waitingPromo(x, y, self.selected)
+			end
+			return true
+		elseif ret == true then
 			self.selected = nil
 			self.dirty = true
 			self:pressed(sX * 10 + sY, x * 10 + y)
@@ -69,22 +75,37 @@ local function onMouseDown(self, btn, mx, my)
 end
 
 local function onMouseUp(self, btn, mx, my)
+	-- if self.waitingPromo then return true end
 	local game = self.game
 	local x, y = self:squareAtMouse(mx, my)
 	if not x then return true end
 
 	if game.over then return true end
 	if self.selected then
-		local sx, sy = self.selected.x, self.selected.y
-		if game:moveSelectedTo(x, y, self.selected) then
+		local sX, sY = self.selected.x, self.selected.y
+		local ret = game:moveSelectedTo(x, y, self.selected)
+		if ret == 'promo' then
+			if self.waitingPromo then
+				self:waitingPromo(x, y, self.selected)
+			end
+			return true
+		elseif ret == true then
 			self.selected = nil
 			self.dirty = true
-			self:pressed(sx * 10 + sy, x * 10 + y)
+			self:pressed(sX * 10 + sY, x * 10 + y)
 			return true
 		end
 	else
 		return true
 	end
+	return true
+end
+
+local function onFocus(self, focused)
+	if focused then return end
+	if self.game.pendingPromotion then return end
+	clearSelection(self, self.game)
+
 	return true
 end
 
@@ -187,14 +208,13 @@ function _Board.Board(args)
 	instance.rotate = true
 
 	instance.draw = draw
+	instance.onFocus = onFocus
 	instance.onMouseDown = onMouseDown
-	instance.onMouseUp = onMouseUp
+	-- instance.onMouseUp = onMouseUp
 	instance.selectSquare = selectSquare
 	instance.squareAtMouse = squareAtMouse
 
 	return instance
 end
-
-
 
 return _Board
