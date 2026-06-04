@@ -211,14 +211,14 @@ local function checkUpdates(shaSum)
 		hashList[path] = hash
 	end
 	for path, hash in pairs(userList) do
-		log('USER: '.. path .. ' | ' .. hash)
+		-- log('USER: '.. path .. ' | ' .. hash)
 		if not hashList[path] then
-			-- fs.delete(path)
+			fs.delete(path)
 			ret = true
 		end
 	end
 	for path, hash in pairs(hashList) do
-		log('SUMS: '.. path .. ' | ' .. hash)
+		-- log('SUMS: '.. path .. ' | ' .. hash)
 		local absPath = Chess.path .. path
 		if not userList[absPath] or userList[absPath] ~= hash then
 			table.insert(filesToUpdate, path)
@@ -1246,8 +1246,8 @@ function MainMenu.new()
 				for i, path in ipairs(filesToUpdate) do
 					local request = http.get(link .. path)
 					if request then
-						log('UPDATE: ' .. Chess.path .. path)
-						-- write_file(Chess.path .. path, request.readAll())
+						-- log('UPDATE: ' .. Chess.path .. path)
+						write_file(Chess.path .. path, request.readAll())
 						request.close()
 						self.loading = i / #filesToUpdate
 						self:draw()

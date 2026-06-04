@@ -1,5 +1,5 @@
 package.path = package.path .. ";/Data/?;/Data/?.lua;/Data/?/init.lua"
-log = require 'inspector'
+-- log = require 'inspector'
 
 -- term.setTextColor(colors.yellow)
 -- print('Print \'t\' or \'g\' to run Chess using text or graphics mode. Or just press Enter, to auto detect mode')
