@@ -19,11 +19,14 @@ local function isInsideRect(dx, dy, radius)
 end
 
 function geometry.draw_rounded_rect_outline(x, y, w, h, r, bc)
-	local R = _floor(r)
+	local R = _floor(r or 0)
 	R = _min(R, _floor(w / 2), _floor(h / 2))
 
 	if R < 1 then
-		term.drawPixels(x, y, bc, w, h)
+		term.drawPixels(x, y, bc, w, 1)
+		term.drawPixels(x, y, bc, 1, h)
+		term.drawPixels(x + w - 1, y, bc, 1, h)
+		term.drawPixels(x, y + h - 1, bc, w, 1)
 		return
 	end
 
@@ -53,48 +56,48 @@ end
 local cornerCache = {}
 
 local function getCornerOffsets(R)
-    local cached = cornerCache[R]
-    if cached then return cached end
+	local cached = cornerCache[R]
+	if cached then return cached end
 
-    local c = R - 0.5
-    local rr = R * R
-    local t = {}
+	local c = R - 0.5
+	local rr = R * R
+	local t = {}
 
-    for j = 0, R - 1 do
-        local dy = j - c
-        local dx = _sqrt(rr - dy * dy)
-        t[j] = _ceil(c - dx - 1e-9)
-    end
+	for j = 0, R - 1 do
+		local dy = j - c
+		local dx = _sqrt(rr - dy * dy)
+		t[j] = _ceil(c - dx - 1e-9)
+	end
 
-    cornerCache[R] = t
-    return t
+	cornerCache[R] = t
+	return t
 end
 
 function geometry.draw_filled_rounded_rect(x, y, w, h, r, bc)
-    local R = _floor(r or 0)
-    R = _min(R, _floor(w / 2), _floor(h / 2))
+	local R = _floor(r or 0)
+	R = _min(R, _floor(w / 2), _floor(h / 2))
 
-    if R <= 0 then
-        term.drawPixels(x, y, bc, w, h)
-        return
-    end
+	if R <= 0 then
+		term.drawPixels(x, y, bc, w, h)
+		return
+	end
 
-    local offsets = getCornerOffsets(R)
+	local offsets = getCornerOffsets(R)
 
-    local innerH = h - 2 * R
-    if innerH > 0 then
-        term.drawPixels(x, y + R, bc, w, innerH)
-    end
+	local innerH = h - 2 * R
+	if innerH > 0 then
+		term.drawPixels(x, y + R, bc, w, innerH)
+	end
 
-    for j = 0, R - 1 do
-        local off = offsets[j]
-        local rowWidth = w - 2 * off
+	for j = 0, R - 1 do
+		local off = offsets[j]
+		local rowWidth = w - 2 * off
 
-        if rowWidth > 0 then
-            term.drawPixels(x + off, y + j, bc, rowWidth, 1)
-            term.drawPixels(x + off, y + h - 1 - j, bc, rowWidth, 1)
-        end
-    end
+		if rowWidth > 0 then
+			term.drawPixels(x + off, y + j, bc, rowWidth, 1)
+			term.drawPixels(x + off, y + h - 1 - j, bc, rowWidth, 1)
+		end
+	end
 end
 
 function geometry.draw_circle(startX, startY, diameter, bg)
@@ -133,16 +136,20 @@ function geometry.draw_filled_circle(startX, startY, diameter, bc)
 	local R = diameter / 2
 
 	local offsets = getCornerOffsets(R)
+	local fR = math.floor(R)
+	if diameter - fR * 2 > 0 then
+		term.drawPixels(startX, startY + fR, bc, diameter, 1)
+	end
 
 	for j = 0, R - 1 do
-        local off = offsets[j]
-        local rowWidth = diameter - 2 * off
+		local off = offsets[j]
+		local rowWidth = diameter - 2 * off
 
-        if rowWidth > 0 then
-            term.drawPixels(startX + off, startY + j, bc, rowWidth, 1)
-            term.drawPixels(startX + off, startY + diameter - 1 - j, bc, rowWidth, 1)
-        end
-    end
+		if rowWidth > 0 then
+			term.drawPixels(startX + off, startY + j, bc, rowWidth, 1)
+			term.drawPixels(startX + off, startY + diameter - 1 - j, bc, rowWidth, 1)
+		end
+	end
 end
 
 return geometry

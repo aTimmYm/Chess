@@ -121,9 +121,14 @@ function _Network.broadcast(self, message)
 	end
 end
 
-_Network.connectHandler = function () end
-_Network.messageHandler = function () end
-_Network.closeHandler = function () end
+function _Network.closeClient(self, id)
+	clients[id].close()
+	clients[id] = nil
+end
+
+_Network.connectHandler = function (...) end
+_Network.messageHandler = function (...) end
+_Network.closeHandler = function (...) end
 
 function _Network.eventHandler(self, evt)
 	local event = evt[1]

@@ -1,4 +1,6 @@
 local Chess = {}
+Chess.version = '1.0.1'
+Chess.path = ''
 local xToFile = { [1] = "a", [2] = "b", [3] = "c", [4] = "d", [5] = "e", [6] = "f", [7] = "g", [8] = "h" }
 
 Chess.pieceGlyph = {
@@ -88,10 +90,10 @@ Chess.pieceGlyph = {
 Chess.BOARD_BG_A = colors.orange
 Chess.BOARD_BG_B = colors.brown
 
-local Game = dofile('Data/Chess/Game.lua')
+local Game = dofile (Chess.path .. 'Data/Chess/Game.lua')
 local Board
 if term.setGraphicsMode and term.getGraphicsMode() then
-	Board = dofile('Data/Chess/BoardGM.lua')
+	Board = dofile (Chess.path .. 'Data/Chess/BoardGM.lua')
 	Board.UI = require 'UIGM'
 	Board.font = require 'Font'
 	-- function Chess.drawPiece(x, y, gl, color)
@@ -116,7 +118,7 @@ if term.setGraphicsMode and term.getGraphicsMode() then
 	end
 	Board.drawPiece = Chess.drawPiece
 else
-	Board = dofile('Data/Chess/Board.lua')
+	Board = dofile(Chess.path .. 'Data/Chess/Board.lua')
 	Board.UI = require 'UI'
 end
 
