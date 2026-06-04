@@ -1,4 +1,5 @@
-package.path = package.path .. ";/Data/?;/Data/?.lua;/Data/?/init.lua"
+local path = ''
+package.path = package.path .. ";/"..path.."Data/?;/"..path.."Data/?.lua;/"..path.."Data/?/init.lua"
 -- log = require 'inspector'
 
 -- term.setTextColor(colors.yellow)
@@ -15,7 +16,7 @@ package.path = package.path .. ";/Data/?;/Data/?.lua;/Data/?/init.lua"
 
 if term.setGraphicsMode then
 	term.setGraphicsMode(1)
-	os.run(_ENV, 'GM.lua')
+	os.run(_ENV, path .. 'GM.lua')
 elseif r == 't' or r == '' then
-	os.run(_ENV, 'TM.lua')
+	os.run(_ENV, path .. 'TM.lua')
 end
