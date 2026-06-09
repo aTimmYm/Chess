@@ -15,9 +15,9 @@ package.path = package.path  ..  ";/" .. APPDIR .. "Data/?;/" .. APPDIR .. "Data
 -- 	os.run(_ENV, 'TM.lua')
 -- end
 
--- if term.setGraphicsMode then
--- 	term.setGraphicsMode(1)
--- 	os.run(_ENV, APPDIR  ..  'GM.lua')
--- elseif r == 't' or r == '' then
+if term.setGraphicsMode then
+	term.setGraphicsMode(1)
+	os.run(_ENV, APPDIR  ..  'GM.lua')
+elseif r == 't' or r == '' then
 	os.run(_ENV, APPDIR  ..  'TM.lua')
--- end
+end
