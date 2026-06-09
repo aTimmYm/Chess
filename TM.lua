@@ -177,9 +177,9 @@ local root = UI.Root()
 Screen.surface = root
 
 local sounds = {
-	['move'] = Chess.path .. 'Data/sounds/chess_move',
-	['capture'] = Chess.path .. 'Data/sounds/chess_capture',
-	['checkmate'] = Chess.path .. 'Data/sounds/chess_checkmate',
+	['move'] = APPDIR .. 'Data/sounds/chess_move',
+	['capture'] = APPDIR .. 'Data/sounds/chess_capture',
+	['checkmate'] = APPDIR .. 'Data/sounds/chess_checkmate',
 }
 local VOLUMES = {}
 for i = 0, 14 do
@@ -189,7 +189,8 @@ end
 local exeption = {
 	['rom'] = true,
 	['.git'] = true,
-	[Chess.path .. 'Data/Settings/user.json'] = true
+	[APPDIR .. 'Data/Settings/user.json'] = true,
+	[APPDIR .. 'Data/user.json'] = true
 }
 
 local function notification(msg)
@@ -224,7 +225,8 @@ end
 local function listAllFiles(path, array)
 	local files = fs.list(path)
 
-	for _, file in ipairs(files) do
+	for i = 1, #files do
+		local file = files[i]
 		local fullPath = fs.combine(path, file)
 
 		if fs.isDir(fullPath) then
@@ -244,7 +246,7 @@ end
 
 local function userFiles()
 	local files = {}
-	listAllFiles(Chess.path, files)
+	listAllFiles(APPDIR:sub(1, -2), files)
 
 	return files
 end
@@ -268,7 +270,7 @@ local function checkUpdates(shaSum)
 	end
 	for path, hash in pairs(hashList) do
 		-- log('SUMS: '.. path .. ' | ' .. hash)
-		local absPath = Chess.path .. path
+		local absPath = APPDIR .. path
 		if not userList[absPath] or userList[absPath] ~= hash then
 			table.insert(filesToUpdate, path)
 			ret = true
@@ -423,7 +425,8 @@ function AboutMenu.new()
 
 	function page.scrollBox.onResize(width, height)
 		Height, w = 0, width - 4
-		for i, child in ipairs(page.scrollBox.children) do
+		for i = 1, #page.scrollBox.children do
+			local child = page.scrollBox.children[i]
 			local t = TB['about_textBlock'..i]
 			local h = (#(UI.wrap_text_to_width(t, w)))
 			child.w = w
@@ -885,7 +888,7 @@ function LobbyMenu.new()
 	page.Player1.team = 'w'
 	page.Player1.ready = false
 	page.Player1.nickname = user.Nickname
-	page.Player1.img = blittle.load('Data/ChessProfile.ico')
+	page.Player1.img = blittle.load(APPDIR .. 'Data/ChessProfile.ico')
 	page.Player1.oldDraw = page.Player1.draw
 	function page.Player1:draw()
 		self.bc = self.ready and colors.green or colors.gray
@@ -1058,26 +1061,26 @@ function JoinMenu.new()
 		Screen:switch('mainMenu')
 	end
 
-	page.btnL = UI.Button{x = 6, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'L'}
-	page.surface:addChild(page.btnL)
-	function page.btnL:pressed()
-		page.tfIP.text = 'localhost'
-		page.tfIP.dirty = true
-	end
+	-- page.btnL = UI.Button{x = 6, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'L'}
+	-- page.surface:addChild(page.btnL)
+	-- function page.btnL:pressed()
+	-- 	page.tfIP.text = 'localhost'
+	-- 	page.tfIP.dirty = true
+	-- end
 
-	page.btnV = UI.Button{x = 8, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'V'}
-	page.surface:addChild(page.btnV)
-	function page.btnV:pressed()
-		page.tfIP.text = '192.168.191.153'
-		page.tfIP.dirty = true
-	end
+	-- page.btnV = UI.Button{x = 8, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'V'}
+	-- page.surface:addChild(page.btnV)
+	-- function page.btnV:pressed()
+	-- 	page.tfIP.text = '192.168.191.153'
+	-- 	page.tfIP.dirty = true
+	-- end
 
-	page.btnA = UI.Button{x = 10, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'A'}
-	page.surface:addChild(page.btnA)
-	function page.btnA:pressed()
-		page.tfIP.text = '192.168.191.87'
-		page.tfIP.dirty = true
-	end
+	-- page.btnA = UI.Button{x = 10, y = 2, w = 1, h = 1, bc = colors.gray, fc = colors.white, text = 'A'}
+	-- page.surface:addChild(page.btnA)
+	-- function page.btnA:pressed()
+	-- 	page.tfIP.text = '192.168.191.87'
+	-- 	page.tfIP.dirty = true
+	-- end
 
 	local text, hint
 	if user.ServerType == 'Rednet' then
@@ -1112,7 +1115,7 @@ function JoinMenu.new()
 			page.labelError:setText(err)
 			return
 		end
-		network:sendTo({type = 'lobby_join', nickname = user.Nickname, ready = false, team = 'w'})
+		network:sendTo{type = 'lobby_join', nickname = user.Nickname, ready = false, team = 'w'}
 		Screen:switch('lobbyMenu')
 	end
 
@@ -1137,7 +1140,7 @@ function MainMenu.new()
 
 	page.logo = UI.Box{x = math.floor((root.w - 6)/2) + 1, y = 3, w = 6, h = 5, bc = colors.black}
 	page.surface:addChild(page.logo)
-	page.logo.img = blittle.load("Data/logo.ico")
+	page.logo.img = blittle.load(APPDIR .. 'Data/logo.ico')
 	function page.logo:draw()
 		blittle.draw(self.img, self.x, self.y)
 	end
@@ -1203,7 +1206,7 @@ function MainMenu.new()
 		Screen:openModal('aboutMenu')
 	end
 
-	page.labelVersion = UI.Label{x = 1, y = root.h - 1, w = #('Ver.:' .. Chess.version), h = 1, bc = page.surface.bc, fc = colors.gray, text = 'Ver.:' .. Chess.version, align = "left"}
+	page.labelVersion = UI.Label{x = 1, y = root.h - 1, w = #('Ver.:' .. APPVERSION), h = 1, bc = page.surface.bc, fc = colors.gray, text = 'Ver.:' .. APPVERSION, align = "left"}
 	page.surface:addChild(page.labelVersion)
 
 	page.btnUpdate = UI.Button{x = 1, y = root.h, w = 16, h = 1, radius = 5, text = 'Check for update', bc = colors.gray, fc = colors.white}
@@ -1241,11 +1244,12 @@ function MainMenu.new()
 			local ret, filesToUpdate = checkUpdates(shaSum)
 			if ret then
 				self:setText('Updating')
-				for i, path in ipairs(filesToUpdate) do
+				for i = 1, #filesToUpdate do
+					local path = filesToUpdate[i]
 					local request = http.get(link .. path)
 					if request then
-						-- log('UPDATE: ' .. Chess.path .. path)
-						write_file(Chess.path .. path, request.readAll())
+						-- log('UPDATE: ' .. APPDIR .. path)
+						write_file(APPDIR .. path, request.readAll())
 						request.close()
 						self.loading = i / #filesToUpdate
 						self:draw()

@@ -229,7 +229,8 @@ function UI.Widget(args)
 end
 
 local function Container_layoutChild(self)
-	for _, child in ipairs(self.children) do
+	for i = 1, #self.children do
+		local child = self.children[i]
 		child.x, child.y = self.x + child.lX - 1, self.y + child.lY - 1
 	end
 end
@@ -237,14 +238,14 @@ end
 local function Container_onLayout(self)
 	self:layoutChild()
 	self.dirty = true
-	for _, child in ipairs(self.children) do
-		child:onLayout()
+	for i = 1, #self.children do
+		self.children[i]:onLayout()
 	end
 end
 
 local function Container_addChild(self, child, pos)
-	for _, v in ipairs(self.children) do
-		if v == child then
+	for i = 1, #self.children do
+		if v == self.children[i] then
 			return false
 		end
 	end
@@ -265,7 +266,7 @@ local function Container_addChild(self, child, pos)
 	if pos then
 		table_insert(self.children, pos, child)
 	else
-		table_insert(self.children, child)
+		self.children[#self.children + 1] = child
 	end
 	--child.dirty = true
 	return true
@@ -276,7 +277,8 @@ local function Container_removeChild(self, child)
 		self.children = {}
 		return
 	end
-	for i, v in ipairs(self.children) do
+	for i = 1, #self.children do
+		local v = self.children[i]
 		if v == child then
 			child.parent = nil
 			child.lX, child.lY = nil, nil
@@ -289,8 +291,8 @@ end
 
 local function Container_redraw(self)
 	redraw(self)
-	for _, child in ipairs(self.children) do
-		child:redraw()
+	for i = 1, #self.children do
+		self.children[i]:redraw()
 	end
 end
 
@@ -308,8 +310,8 @@ local function Container_onEvent(self, evt)
 			end
 		end
 	elseif not EVENTS.FOCUS[event] then
-		for _, child in ipairs(self.children) do
-			if child:onEvent(evt) then
+		for i = 1, #self.children do
+			if self.children[i]:onEvent(evt) then
 				return true
 			end
 		end
@@ -354,7 +356,8 @@ local function Root_tResize(self, evt)
 		self.w, self.h = term.getSize()
 	end
 	-- if self.onResize then self.onResize(self.w, self.h) end
-	for _, child in ipairs(self.children) do
+	for i = 1, #self.children do
+		local child = self.children[i]
 		if child.onResize then
 			child.onResize(self.w, self.h)
 		end
@@ -469,7 +472,8 @@ local function ScrollBox_redraw(self)
 	-- term.setBackgroundColor(self.term.getBackgroundColor())
 	-- term.setCursorBlink(self.term.getCursorBlink())
 	if self.dirty then self:draw(); self.dirty = false end
-	for _,child in ipairs(self.visibleChild) do
+	for i = 1, #self.visibleChild do
+		local child = self.visibleChild[i]
 		local tempX, tempY = child.x, child.y
 		child.x = child.lX - self.scroll.pos_x
 		child.y = child.lY - self.scroll.pos_y
@@ -485,13 +489,14 @@ local function ScrollBox_onLayout(self)
 	self.visibleChild = {}
 	self.dirty = true
 	Container_onLayout(self)
-	for _, child in ipairs(self.children) do
+	for i = 1, #self.children do
+		local child = self.children[i]
 		child.y = child.y - self.scroll.pos_y
 		child.x = child.x - self.scroll.pos_x
 		self.scroll.max_y = _max(_max(self.scroll.max_y, child.lY + child.h) - self.h, 0)
 		self.scroll.max_x = _max(_max(self.scroll.max_x, child.lX + child.w) - self.w, 0)
 		if child.y + child.h > self.y and child.y <= self.y + self.h - 1 then
-			table_insert(self.visibleChild, child)
+			self.visibleChild[#self.visibleChild + 1] = child
 		end
 	end
 	self.win.reposition(self.x, self.y)
@@ -714,7 +719,8 @@ end
 
 local function RadioButton_draw(self)
 	term.setBackgroundColor(self.bc)
-	for i, v in ipairs(self.text) do
+	for i = 1, #self.text do
+		local v = self.text[i]
 		term.setCursorPos(self.x, self.y + i - 1)
 		term.setTextColor(colors.gray)
 		if self.item == i then
@@ -2951,11 +2957,12 @@ local function contextMouseDown(self, btn, x, y)
 end
 
 local function contextDraw(self) -- ВРЕМЕННОЕ НАДО МЕНЯТЬ
-	-- local dropdown = self.dropdown
+	local dropdown = self.dropdown
 
 	paintutils.drawFilledBox(self.x, self.y, self.w + self.x - 1, self.h + self.y - 1, self.bc)
 
-	for i, v in ipairs(self.dropdown.array) do
+	for i = 1, #dropdown.array do
+		local v = dropdown.array[i]
 		term.setCursorPos(self.x, self.y + i - 1)
 		term.setBackgroundColor(self.bc)
 		term.setTextColor(self.fc)
@@ -2996,8 +3003,8 @@ function UI.Dropdown(args)
 	instance.array = args.array or {}
 	instance.item_index = 1
 	if args.defaultValue then
-		for i, v in ipairs(instance.array) do
-			if v == args.defaultValue then
+		for i = 1, #instance.array do
+			if instance.array[i] == args.defaultValue then
 				instance.item_index = i
 				break
 			end

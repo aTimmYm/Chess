@@ -5,7 +5,7 @@ local Screen = require "ScreenManager"
 local Chess = require "Chess"
 local network = require "Network"
 local user = require 'Settings'
-local localization = dofile(Chess.path .. 'Data/localization.lua')
+local localization = dofile(APPDIR .. 'Data/localization.lua')
 local g = require 'geometry'
 local sha; if not jit then sha = require 'sha2' end
 
@@ -128,9 +128,9 @@ local root = UI.Root()
 Screen.surface = root
 
 local sounds = {
-	['move'] = Chess.path .. 'Data/sounds/chess_move',
-	['capture'] = Chess.path .. 'Data/sounds/chess_capture',
-	['checkmate'] = Chess.path .. 'Data/sounds/chess_checkmate',
+	['move'] = APPDIR .. 'Data/sounds/chess_move',
+	['capture'] = APPDIR .. 'Data/sounds/chess_capture',
+	['checkmate'] = APPDIR .. 'Data/sounds/chess_checkmate',
 }
 local VOLUMES = {}
 for i = 0, 14 do
@@ -140,7 +140,8 @@ end
 local exeption = {
 	['rom'] = true,
 	['.git'] = true,
-	[Chess.path .. 'Data/Settings/user.json'] = true
+	[APPDIR .. 'Data/Settings/user.json'] = true,
+	[APPDIR .. 'Data/user.json'] = true
 }
 
 local function notification(msg)
@@ -175,9 +176,11 @@ end
 local function listAllFiles(path, array)
 	local files = fs.list(path)
 
-	for _, file in ipairs(files) do
+	for i = 1, #files do
+		local file = files[i]
 		local fullPath = fs.combine(path, file)
 
+		-- log(fullPath)
 		if fs.isDir(fullPath) then
 			if not exeption[fullPath] then listAllFiles(fullPath, array) end
 		else
@@ -195,7 +198,7 @@ end
 
 local function userFiles()
 	local files = {}
-	listAllFiles(Chess.path, files)
+	listAllFiles(APPDIR:sub(1, -2), files)
 
 	return files
 end
@@ -219,7 +222,7 @@ local function checkUpdates(shaSum)
 	end
 	for path, hash in pairs(hashList) do
 		-- log('SUMS: '.. path .. ' | ' .. hash)
-		local absPath = Chess.path .. path
+		local absPath = APPDIR .. path
 		if not userList[absPath] or userList[absPath] ~= hash then
 			table.insert(filesToUpdate, path)
 			ret = true
@@ -379,7 +382,8 @@ function AboutMenu.new()
 
 	function page.scrollBox.onResize(width, height)
 		local Height, w = 0, width - 20
-		for i, child in ipairs(page.scrollBox.children) do
+		for i = 1, #page.scrollBox.children do
+			local child = page.scrollBox.children[i]
 			local t = LC['about_textBlock'..i]
 			local h = (#(UI.wrap_text_to_width(t, w))) * font.charHeight
 			child.w = w
@@ -891,7 +895,7 @@ function LobbyMenu.new()
 	page.Player1 = UI.Box{x = math.floor((root.w - 60 - 48)/2) + 1, y = math.floor((root.h - 65)/2) + 1, w = 48, h = 65, radius = 5, bc = colors.gray, fc = colors.white}
 	page.Player1.team = 'w'
 	page.Player1.ready = false
-	page.Player1.img = paintutils.loadImage(Chess.path .. 'Data/ChessProfile.nfp')
+	page.Player1.img = paintutils.loadImage(APPDIR .. 'Data/ChessProfile.nfp')
 	page.Player1.nickname = user.Nickname
 	page.Player1.oldDraw = page.Player1.draw
 	function page.Player1:draw()
@@ -1059,26 +1063,26 @@ function JoinMenu.new()
 		Screen:switch('mainMenu')
 	end
 
-	page.btnL = UI.Button{x = page.btnExit.x + page.btnExit.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'L'}
-	page.surface:addChild(page.btnL)
-	function page.btnL:pressed()
-		page.tfIP.text = 'localhost'
-		page.tfIP.dirty = true
-	end
+	-- page.btnL = UI.Button{x = page.btnExit.x + page.btnExit.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'L'}
+	-- page.surface:addChild(page.btnL)
+	-- function page.btnL:pressed()
+	-- 	page.tfIP.text = 'localhost'
+	-- 	page.tfIP.dirty = true
+	-- end
 
-	page.btnV = UI.Button{x = page.btnL.x + page.btnL.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'V'}
-	page.surface:addChild(page.btnV)
-	function page.btnV:pressed()
-		page.tfIP.text = '192.168.191.153'
-		page.tfIP.dirty = true
-	end
+	-- page.btnV = UI.Button{x = page.btnL.x + page.btnL.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'V'}
+	-- page.surface:addChild(page.btnV)
+	-- function page.btnV:pressed()
+	-- 	page.tfIP.text = '192.168.191.153'
+	-- 	page.tfIP.dirty = true
+	-- end
 
-	page.btnA = UI.Button{x = page.btnV.x + page.btnV.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'A'}
-	page.surface:addChild(page.btnA)
-	function page.btnA:pressed()
-		page.tfIP.text = '192.168.191.87'
-		page.tfIP.dirty = true
-	end
+	-- page.btnA = UI.Button{x = page.btnV.x + page.btnV.w + 5, y = 2, w = 10, h = 10, radius = 2, bc = colors.gray, fc = colors.white, text = 'A'}
+	-- page.surface:addChild(page.btnA)
+	-- function page.btnA:pressed()
+	-- 	page.tfIP.text = '192.168.191.87'
+	-- 	page.tfIP.dirty = true
+	-- end
 
 	local text, hint
 	if user.ServerType == 'Rednet' then
@@ -1138,7 +1142,7 @@ function MainMenu.new()
 
 	page.logo = UI.Box{x = math.floor((root.w - 75)/2) + 1, y = 5, w = 75, h = 75, bc = colors.blue}
 	page.surface:addChild(page.logo)
-	page.logo.img = paintutils.loadImage(Chess.path .. 'Data/logo.nfp')
+	page.logo.img = paintutils.loadImage(APPDIR .. 'Data/logo.nfp')
 	function page.logo:draw()
 		paintutils.drawImage(self.img, self.x + 17, self.y + 2)
 	end
@@ -1205,7 +1209,7 @@ function MainMenu.new()
 		Screen:openModal('aboutMenu')
 	end
 
-	page.labelVersion = UI.Label{x = 0, y = root.h - 20, w = font.calcWidth('Ver.: ' .. Chess.version), h = 10, bc = page.surface.bc, fc = colors.gray, text = 'Ver.: ' .. Chess.version, align = "left"}
+	page.labelVersion = UI.Label{x = 0, y = root.h - 20, w = font.calcWidth('Ver.: ' .. APPVERSION), h = 10, bc = page.surface.bc, fc = colors.gray, text = 'Ver.: ' .. APPVERSION, align = "left"}
 	page.surface:addChild(page.labelVersion)
 
 	page.btnUpdate = UI.Button{x = 0, y = root.h - 10, w = font.calcWidth(LC.check_for_update) + 10, h = 10, radius = 5, text = LC.check_for_update, bc = colors.gray, fc = colors.white}
@@ -1243,11 +1247,12 @@ function MainMenu.new()
 			local ret, filesToUpdate = checkUpdates(shaSum)
 			if ret then
 				self:setText(LC.updating)
-				for i, path in ipairs(filesToUpdate) do
+				for i = 1, #filesToUpdate do
+					local path = filesToUpdate[i]
 					local request = http.get(link .. path)
 					if request then
-						-- log('UPDATE: ' .. Chess.path .. path)
-						write_file(Chess.path .. path, request.readAll())
+						-- log('UPDATE: ' .. APPDIR .. path)
+						write_file(APPDIR .. path, request.readAll())
 						request.close()
 						self.loading = i / #filesToUpdate
 						self:draw()

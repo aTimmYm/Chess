@@ -1,5 +1,4 @@
-local Chess = require 'Chess'
-local settingsPath = Chess.path .. 'Data/Settings/user.json'
+local settingsPath = APPDIR .. 'Data/Settings/user.json'
 local defaultData = {
 	['Volume'] = 15,
 	['Nickname'] = 'Unknown',
@@ -11,8 +10,8 @@ local defaultData = {
 }
 local user
 
-if fs.exists(Chess.path .. 'Data/user.json') then
-	fs.move(Chess.path .. 'Data/user.json', Chess.path .. 'Data/Settings/user.json')
+if fs.exists(APPDIR .. 'Data/user.json') then
+	fs.move(APPDIR .. 'Data/user.json', settingsPath)
 end
 
 if fs.exists(settingsPath) then

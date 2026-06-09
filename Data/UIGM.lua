@@ -228,7 +228,8 @@ function UI.Widget(args)
 end
 
 local function Container_layoutChild(self)
-	for _, child in ipairs(self.children) do
+	for i = 1, #self.children do
+		local child = self.children[i]
 		child.x, child.y = self.x + child.local_x, self.y + child.local_y
 	end
 end
@@ -236,14 +237,14 @@ end
 local function Container_onLayout(self)
 	self:layoutChild()
 	self.dirty = true
-	for _, child in ipairs(self.children) do
-		child:onLayout()
+	for i = 1, #self.children do
+		self.children[i]:onLayout()
 	end
 end
 
 local function Container_addChild(self, child, pos)
-	for _, v in ipairs(self.children) do
-		if v == child then
+	for i = 1, #self.children do
+		if v == self.children[i] then
 			return false
 		end
 	end
@@ -264,7 +265,7 @@ local function Container_addChild(self, child, pos)
 	if pos then
 		table_insert(self.children, pos, child)
 	else
-		table_insert(self.children, child)
+		self.children[#self.children + 1] = child
 	end
 	--child.dirty = true
 	return true
@@ -275,7 +276,8 @@ local function Container_removeChild(self, child)
 		self.children = {}
 		return
 	end
-	for i, v in ipairs(self.children) do
+	for i = 1, #self.children do
+		local v = self.children[i]
 		if v == child then
 			child.parent = nil
 			child.local_x, child.local_y = nil, nil
@@ -288,8 +290,8 @@ end
 
 local function Container_redraw(self)
 	redraw(self)
-	for _, child in ipairs(self.children) do
-		child:redraw()
+	for i = 1, #self.children do
+		self.children[i]:redraw()
 	end
 end
 
@@ -307,8 +309,8 @@ local function Container_onEvent(self, evt)
 			end
 		end
 	elseif not EVENTS.FOCUS[event] then
-		for _, child in ipairs(self.children) do
-			if child:onEvent(evt) then
+		for i = 1, #self.children do
+			if self.children[i]:onEvent(evt) then
 				return true
 			end
 		end
@@ -353,7 +355,8 @@ local function Root_tResize(self, evt)
 		self.w, self.h = term.getSize(1)
 	end
 	-- if self.onResize then self.onResize(self.w, self.h) end
-	for _, child in ipairs(self.children) do
+	for i = 1, #self.children do
+		local child = self.children[i]
 		if child.onResize then
 			child.onResize(self.w, self.h)
 		end
@@ -536,8 +539,8 @@ local function ScrollBox_redraw(self)
 	if self.dirty then self:draw(); self.dirty = false end
 	local old = UI.term_setClip(self.x, self.y, self.w, self.h)
 
-	for _,child in ipairs(self.visibleChild) do
-		child:redraw()
+	for i = 1, #self.visibleChild do
+		self.visibleChild[i]:redraw()
 	end
 
 	UI.term_unsetClip(old)
@@ -547,13 +550,14 @@ local function ScrollBox_onLayout(self)
 	self.visibleChild = {}
 	self.dirty = true
 	Container_onLayout(self)
-	for _, child in ipairs(self.children) do
+	for i = 1, #self.children do
+		local child = self.children[i]
 		child.y = child.y - self.scroll.pos_y
 		child.x = child.x - self.scroll.pos_x
 		self.scroll.max_y = _max(_max(self.scroll.max_y, child.local_y + child.h) - self.h, 0)
 		self.scroll.max_x = _max(_max(self.scroll.max_x, child.local_x + child.w) - self.w, 0)
 		if child.y + child.h >= self.y and child.y <= self.y + self.h then
-			table_insert(self.visibleChild, child)
+			self.visibleChild[#self.visibleChild + 1] = child
 		end
 		child:onLayout()
 	end
@@ -721,7 +725,7 @@ local function RadioButton_horizontal_draw(self)
 		local fc = colors.gray
 		-- term.setCursorPos(self.x + i - 1, self.y)
 		if self.item == i then
-			local fc = self.fc
+			fc = self.fc
 		end
 		-- term.write("\7")
 		font.simpleText('•', x,y,fc)
@@ -771,16 +775,16 @@ end
 
 local function RadioButton_draw(self)
 	term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
-	for i, v in ipairs(self.text) do
+	for i = 1, #self.text do
 		local fc = colors.gray
 		term.setCursorPos(self.x, self.y + i - 1)
 		if self.item == i then
 			fc = self.fc
 			term.setTextColor(self.fc)
 		end
-		i = i - 1
-		font.simpleText('•', self.x, self.y + (i * 10), fc)
-		font.simpleText(v, self.x+5, self.y + (i * 10), self.fc)
+		local it = i - 1
+		font.simpleText('•', self.x, self.y + (it * 10), fc)
+		font.simpleText(self.text[i], self.x + 5, self.y + (it * 10), self.fc)
 	end
 end
 
@@ -2982,13 +2986,14 @@ local function contextMouseDown(self, btn, x, y)
 end
 
 local function contextDraw(self) -- ВРЕМЕННОЕ НАДО МЕНЯТЬ
+	local dropdown = self.dropdown
 	if self.radius then
 		g.draw_filled_rounded_rect(self.x, self.y, self.w, self.h, self.radius, self.bc)
 	else
 		term.drawPixels(self.x, self.y, self.bc, self.w, self.h)
 	end
-	for i, v in ipairs(self.dropdown.array) do
-		font.simpleText(v, self.x + 3, self.y + ((i - 1) * 10), self.fc)
+	for i = 1, #dropdown.array do
+		font.simpleText(dropdown.array[i], self.x + 3, self.y + ((i - 1) * 10), self.fc)
 	end
 end
 
@@ -3026,8 +3031,8 @@ function UI.Dropdown(args)
 	instance.array = args.array or {}
 	instance.item_index = 1
 	if args.defaultValue then
-		for i, v in ipairs(instance.array) do
-			if v == args.defaultValue then
+		for i = 1, #instance.array do
+			if instance.array[i] == args.defaultValue then
 				instance.item_index = i
 				break
 			end
